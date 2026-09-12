@@ -768,6 +768,17 @@ const App = {
       `;
     }
     const groups = this.getFridgeByCategory();
+    const expanded = this.state.inventoryExpanded;
+    // 收起状态：按分类列出食材名（不带数量）
+    const namesByCategory = expanded ? '' : `
+      <div class="overview-ingredients">
+        ${Object.entries(groups).map(([cat, items]) => `
+          <span class="overview-ing-line">
+            <strong>${this.getCategoryEmoji(cat)} ${cat}：</strong>${items.map(i => this.escapeHtml(i.name)).join('、')}
+          </span>
+        `).join('')}
+      </div>
+    `;
     return `
       <div class="fridge-overview" onclick="App.toggleInventory()">
         <div class="overview-main">
@@ -777,12 +788,8 @@ const App = {
             <span>${total} 项食材</span>
           </div>
         </div>
-        <div class="overview-cats">
-          ${Object.entries(groups).map(([cat, items]) => `
-            <span class="overview-cat-tag">${this.getCategoryEmoji(cat)} ${cat} ${items.length}</span>
-          `).join('')}
-        </div>
-        <span class="overview-toggle">${this.state.inventoryExpanded ? '收起 ▲' : '展开 ▼'}</span>
+        <span class="overview-toggle">${expanded ? '收起 ▲' : '展开 ▼'}</span>
+        ${namesByCategory}
       </div>
     `;
   },
@@ -2063,13 +2070,12 @@ const App = {
       groups[key].push(item);
     });
     return order.map(key => `
-      <p style="grid-column:1/-1;font-size:12px;color:#999;margin:8px 0 0;font-weight:600;">${this.escapeHtml(key)}</p>
+      <p style="grid-column:1/-1;font-size:11px;color:#999;margin:6px 0 0;font-weight:600;">${this.escapeHtml(key)}</p>
       ${groups[key].map(item => {
         const hasItem = this.state.fridge.some(entry => entry.name === item.name);
         return `
           <button class="suggestion-chip ${hasItem ? 'selected' : ''}" onclick='App.applySuggestedIngredient(${JSON.stringify(item.name)}, ${JSON.stringify(item.category)})'>
-            <span>${this.escapeHtml(item.emoji)}</span>
-            <strong>${this.escapeHtml(item.name)}</strong>
+            ${this.escapeHtml(item.name)}
           </button>
         `;
       }).join('')}

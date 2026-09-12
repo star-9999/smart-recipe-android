@@ -642,8 +642,9 @@ a {
 /* 冰箱概览卡片 */
 .fridge-overview {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 10px 12px;
   padding: 14px 16px;
   border-radius: 18px;
   background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
@@ -663,38 +664,56 @@ a {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
 }
 .overview-icon {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.8);
-  font-size: 22px;
+  font-size: 20px;
+  flex-shrink: 0;
 }
 .overview-main strong {
   display: block;
-  font-size: 15px;
+  font-size: 14px;
   color: #1a1a1a;
 }
 .overview-main span {
-  font-size: 12px;
+  font-size: 11px;
   color: #92400e;
 }
 .fridge-overview.empty .overview-main span {
   color: #94a3b8;
 }
-.overview-cats {
-  flex: 1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  justify-content: flex-end;
+.overview-toggle {
+  font-size: 12px;
+  color: #c2410c;
+  font-weight: 600;
+  flex-shrink: 0;
 }
-.overview-cat-tag {
-  font-size: 11px;
+/* 收起状态：按分类列出食材名 */
+.overview-ingredients {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 8px;
+  border-top: 1px dashed #fed7aa;
+}
+.overview-ing-line {
+  font-size: 12px;
+  color: #78716c;
+  line-height: 1.5;
+}
+.overview-ing-line strong {
+  color: #92400e;
+  font-weight: 600;
+  margin-right: 2px;
+}
   padding: 3px 8px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.85);
@@ -712,8 +731,8 @@ a {
 .inventory-group {
   margin-bottom: 16px;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
 }
 .inventory-group:last-child {
   margin-bottom: 0;
@@ -727,15 +746,15 @@ a {
   letter-spacing: 0.02em;
 }
 
-/* 紧凑库存卡片（4列网格） */
+/* 紧凑库存卡片（5列网格） */
 .inventory-compact-row {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 2px;
-  padding: 10px 4px 8px;
-  border-radius: 12px;
+  padding: 8px 2px 6px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.85);
   border: 1px solid var(--line);
   cursor: pointer;
@@ -747,17 +766,17 @@ a {
   transform: scale(0.96);
 }
 .inventory-compact-row .inventory-icon {
-  width: 36px;
-  height: 36px;
-  font-size: 22px;
-  border-radius: 10px;
+  width: 28px;
+  height: 28px;
+  font-size: 18px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 .inventory-compact-row strong {
-  font-size: 12px;
+  font-size: 11px;
   color: #1a1a1a;
   font-weight: 600;
   line-height: 1.2;
@@ -767,7 +786,7 @@ a {
   max-width: 100%;
 }
 .compact-amount {
-  font-size: 11px;
+  font-size: 10px;
   color: #94a3b8;
   font-weight: 600;
   flex-shrink: 0;
@@ -811,29 +830,39 @@ a {
 
 .suggestion-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 6px;
 }
 
 .suggestion-chip {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 52px;
-  padding: 0 14px;
-  border-radius: 16px;
+  justify-content: center;
+  min-height: 32px;
+  padding: 4px 6px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.76);
   border: 1px solid var(--line);
-  text-align: left;
+  font-size: 11px;
+  color: #44403c;
+  text-align: center;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.suggestion-chip:active {
+  transform: scale(0.95);
 }
 
 .suggestion-chip.selected {
   background: rgba(246, 218, 203, 0.72);
   border-color: rgba(215, 101, 41, 0.32);
-}
-
-.suggestion-chip span {
-  font-size: 18px;
+  color: #c2410c;
+  font-weight: 600;
 }
 
 .recipe-head {
@@ -1110,7 +1139,7 @@ a {
   }
 
   .suggestion-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
   }
 
   .inventory-actions {
@@ -1168,7 +1197,7 @@ a {
   }
 
   .suggestion-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(8, minmax(0, 1fr));
   }
 
   .inventory-row {

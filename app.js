@@ -1378,10 +1378,7 @@ const App = {
   },
 
   renderPlannerPage() {
-    const recipes = this.matchRecipes();
-    const menuPlan = this.getMenuPlan(recipes);
     const filteredIngredients = this.getFilteredIngredients();
-    const preference = PREFERENCE_PRESETS[this.state.preference];
     const draft = this.state.ingredientDraft;
     const suggestionRows = filteredIngredients.slice(0, 48);
 
@@ -1391,14 +1388,54 @@ const App = {
           <div class="hero-copy">
             <p class="eyebrow">Mobile Cooking Planner</p>
             <h1>先录食材，再生成今晚菜单。</h1>
-            <p class="hero-subtitle">手机上直接输入食材名，选分量后一项项添加；需要时可以点麦克风用语音录入。</p>
+            <p class="hero-subtitle">点下面的食材标签直接加入库存，也可以手动输入或用语音录入。</p>
           </div>
-          ${this.renderHeroStats(recipes, menuPlan)}
         </header>
 
         ${this.renderAiStatusBar()}
 
         <div class="mobile-stack">
+          <section class="panel browser-panel">
+            <div class="panel-head mobile-tight">
+              <div>
+                <p class="section-kicker">常用食材捷径</p>
+                <h2>点一下直接加入库存</h2>
+              </div>
+            </div>
+
+            <div class="search-row">
+              <input
+                type="text"
+                class="search-input"
+                placeholder="筛选常用食材，例如：鸡翅、西兰花、虾仁"
+                value="${this.escapeHtml(this.state.ingredientSearch)}"
+                oninput="App.setIngredientSearch(this.value)"
+              >
+            </div>
+
+            <div class="chip-row category-row">
+              ${['全部', ...Object.keys(INGREDIENT_CATEGORIES)].map(category => `
+                <button class="category-chip ${category === this.state.activeCategory ? 'active' : ''}" onclick='App.setActiveCategory(${JSON.stringify(category)})'>
+                  ${this.escapeHtml(category)}
+                </button>
+              `).join('')}
+            </div>
+
+            ${this.state.activeCategory !== '全部' ? `
+              <div class="chip-row category-row" style="margin-top:6px;">
+                ${['全部', ...Object.keys(INGREDIENT_CATEGORIES[this.state.activeCategory] || {})].map(sub => `
+                  <button class="category-chip ${sub === this.state.activeSubCategory ? 'active' : ''}" onclick='App.setActiveSubCategory(${JSON.stringify(sub)})' style="font-size:12px;padding:4px 10px;">
+                    ${this.escapeHtml(sub)}
+                  </button>
+                `).join('')}
+              </div>
+            ` : ''}
+
+            <div class="suggestion-grid">
+              ${this.renderSuggestionGroups(suggestionRows)}
+            </div>
+          </section>
+
           ${this.renderFridgeOverview()}
           <section class="panel inventory-panel">
             ${this.renderGroupedInventory()}
@@ -1477,119 +1514,6 @@ const App = {
               <p class="support-copy">${this.state.speechSupported ? '支持语音输入食材名称。识别后仍可手动改字和单位。' : '当前浏览器未检测到语音识别，仍可手动输入食材名称。'}</p>
             </div>
           </section>
-
-          <section class="panel plan-panel">
-            <div class="panel-head mobile-tight">
-              <div>
-                <p class="section-kicker">今日菜单规划</p>
-                <h2>先定人数、菜数和口味</h2>
-              </div>
-              <button class="secondary-button" onclick="App.navigate('recipes')">看推荐</button>
-            </div>
-
-            <div class="planner-controls">
-              <div class="control-card">
-                <span class="control-label">用餐人数</span>
-                <div class="stepper">
-                  <button onclick="App.changeServings(-1)">−</button>
-                  <strong>${this.state.servings} 人</strong>
-                  <button onclick="App.changeServings(1)">+</button>
-                </div>
-              </div>
-
-              <div class="control-card">
-                <span class="control-label">计划做几道</span>
-                <div class="stepper">
-                  <button onclick="App.changeDishCount(-1)">−</button>
-                  <strong>${this.state.dishCount} 道</strong>
-                  <button onclick="App.changeDishCount(1)">+</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="preference-block">
-              <div class="preference-head">
-                <span class="control-label">本次偏好</span>
-                <p>${this.escapeHtml(preference.summary)}</p>
-              </div>
-              <div class="chip-row">
-                ${Object.entries(PREFERENCE_PRESETS).map(([key, value]) => `
-                  <button class="pref-chip ${key === this.state.preference ? 'active' : ''}" onclick='App.setPreference(${JSON.stringify(key)})'>
-                    ${this.escapeHtml(value.label)}
-                  </button>
-                `).join('')}
-              </div>
-            </div>
-
-            <div class="menu-preview">
-              <div class="panel-head compact">
-                <div>
-                  <p class="section-kicker">系统建议</p>
-                  <h3>今日推荐菜单</h3>
-                </div>
-                <span class="summary-badge">${this.escapeHtml(menuPlan.summary)}</span>
-              </div>
-              ${menuPlan.items.length ? `
-                <div class="menu-strip">
-                  ${menuPlan.items.map(recipe => `
-                    <button class="mini-menu-card" onclick='App.showRecipe(${recipe.id})'>
-                      <span class="mini-menu-top">
-                        <em class="status-dot ${recipe.statusTone}"></em>
-                        ${this.escapeHtml(recipe.statusLabel)}
-                      </span>
-                      <strong>${this.escapeHtml(recipe.name)}</strong>
-                      <span>${this.escapeHtml(recipe.category)} · 健康分 ${recipe.healthScore}</span>
-                    </button>
-                  `).join('')}
-                </div>
-              ` : `
-                <div class="empty-state subtle">
-                  <p>库存还不够成型。先录入主食材和重量，推荐会明显更准。</p>
-                </div>
-              `}
-            </div>
-          </section>
-
-          <section class="panel browser-panel">
-            <div class="panel-head mobile-tight">
-              <div>
-                <p class="section-kicker">常用食材捷径</p>
-                <h2>点一下填入名称，再选分量</h2>
-              </div>
-            </div>
-
-            <div class="search-row">
-              <input
-                type="text"
-                class="search-input"
-                placeholder="筛选常用食材，例如：鸡翅、西兰花、虾仁"
-                value="${this.escapeHtml(this.state.ingredientSearch)}"
-                oninput="App.setIngredientSearch(this.value)"
-              >
-            </div>
-
-            <div class="chip-row category-row">
-              ${['全部', ...Object.keys(INGREDIENT_CATEGORIES)].map(category => `
-                <button class="category-chip ${category === this.state.activeCategory ? 'active' : ''}" onclick='App.setActiveCategory(${JSON.stringify(category)})'>
-                  ${this.escapeHtml(category)}
-                </button>
-              `).join('')}
-            </div>
-
-            ${this.state.activeCategory !== '全部' ? `
-              <div class="chip-row category-row" style="margin-top:6px;">
-                ${['全部', ...Object.keys(INGREDIENT_CATEGORIES[this.state.activeCategory] || {})].map(sub => `
-                  <button class="category-chip ${sub === this.state.activeSubCategory ? 'active' : ''}" onclick='App.setActiveSubCategory(${JSON.stringify(sub)})' style="font-size:12px;padding:4px 10px;">
-                    ${this.escapeHtml(sub)}
-                  </button>
-                `).join('')}
-              </div>
-            ` : ''}
-
-            <div class="suggestion-grid">
-              ${this.renderSuggestionGroups(suggestionRows)}
-            </div>
-          </section>
         </div>
       </section>
     `;
@@ -1639,12 +1563,48 @@ const App = {
             <h1>按库存和健康度，排好今晚菜单。</h1>
           </div>
           <div class="header-actions">
-            <button class="secondary-button" onclick="App.navigate('planner')">返回库存工作台</button>
+            <button class="secondary-button" onclick="App.navigate('planner')">返回录入</button>
             <button class="primary-button" onclick="App.aiRecommendRecipes()">AI 生成今日菜单</button>
           </div>
         </header>
 
         ${this.renderAiStatusBar()}
+
+        <section class="panel plan-panel">
+          <div class="planner-controls">
+            <div class="control-card">
+              <span class="control-label">用餐人数</span>
+              <div class="stepper">
+                <button onclick="App.changeServings(-1)">−</button>
+                <strong>${this.state.servings} 人</strong>
+                <button onclick="App.changeServings(1)">+</button>
+              </div>
+            </div>
+
+            <div class="control-card">
+              <span class="control-label">计划做几道</span>
+              <div class="stepper">
+                <button onclick="App.changeDishCount(-1)">−</button>
+                <strong>${this.state.dishCount} 道</strong>
+                <button onclick="App.changeDishCount(1)">+</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="preference-block">
+            <div class="preference-head">
+              <span class="control-label">口味偏好</span>
+              <p>${this.escapeHtml(preference.summary)}</p>
+            </div>
+            <div class="chip-row">
+              ${Object.entries(PREFERENCE_PRESETS).map(([key, value]) => `
+                <button class="pref-chip ${key === this.state.preference ? 'active' : ''}" onclick='App.setPreference(${JSON.stringify(key)})'>
+                  ${this.escapeHtml(value.label)}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+        </section>
 
         <section class="panel featured-panel">
           <div class="panel-head">

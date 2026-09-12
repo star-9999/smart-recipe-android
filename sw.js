@@ -1,6 +1,6 @@
-// Service worker: precaches the app shell so the installed app works offline.
-// Bump CACHE version whenever the app files change.
-const CACHE = 'recipe-pwa-v11';
+// Service worker: offline-capable PWA with network-first updates.
+// Bump CACHE version whenever app files change.
+const CACHE = 'recipe-pwa-v12';
 const ASSETS = [
   './',
   './index.html',
@@ -28,20 +28,39 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Network-first for pages and code; cache-first for static images.
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
+
   const url = new URL(req.url);
-  // Cross-origin resources (e.g. Google Fonts) go straight to the network.
   if (url.origin !== self.location.origin) return;
-  event.respondWith(
-    caches.match(req).then((hit) => {
-      if (hit) return hit;
-      return fetch(req).then((res) => {
+
+  // Static images: cache-first (they rarely change)
+  if (req.destination === 'image') {
+    event.respondWith(
+      caches.match(req).then((hit) => hit || fetch(req).then((res) => {
         const copy = res.clone();
         caches.open(CACHE).then((cache) => cache.put(req, copy));
         return res;
-      }).catch(() => caches.match('./index.html'));
-    })
+      }).catch(() => caches.match('./icons/icon-192.png')))
+    );
+    return;
+  }
+
+  // Everything else (HTML, JS, CSS, JSON): network-first
+  event.respondWith(
+    fetch(req).then((res) => {
+      const copy = res.clone();
+      caches.open(CACHE).then((cache) => cache.put(req, copy));
+      return res;
+    }).catch(() => caches.match(req).then((hit) => hit || caches.match('./index.html')))
   );
+});
+
+// Notify pages when a new SW takes control (triggers auto-refresh).
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });

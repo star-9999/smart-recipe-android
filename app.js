@@ -237,6 +237,35 @@ const App = {
   init() {
     this.loadState();
     this.render();
+    this.listenForAppUpdate();
+  },
+
+  listenForAppUpdate() {
+    if (!('serviceWorker' in navigator)) return;
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshing) return;
+      refreshing = true;
+      this.showToast('已更新到最新版本，正在刷新...');
+      setTimeout(() => window.location.reload(), 800);
+    });
+    // Check for waiting SW (new version ready)
+    navigator.serviceWorker.ready.then((reg) => {
+      if (reg.waiting) {
+        this.showToast('发现新版本，正在应用...');
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+      reg.addEventListener('updatefound', () => {
+        const newSW = reg.installing;
+        if (!newSW) return;
+        newSW.addEventListener('statechange', () => {
+          if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+            this.showToast('发现新版本，正在应用...');
+            newSW.postMessage({ type: 'SKIP_WAITING' });
+          }
+        });
+      });
+    });
   },
 
   loadState() {
@@ -822,12 +851,28 @@ const App = {
   applySuggestedIngredient(name, category) {
     const existing = this.state.fridge.find(item => item.name === name);
     const fallback = this.getDefaultInventoryPreset(name, category);
-    this.state.ingredientDraft = {
-      name,
-      amount: existing?.amount || fallback.amount || '1',
-      unit: existing?.unit || fallback.unit || '份',
-      category: existing?.category || category || this.inferCategoryFromName(name) || '其他'
-    };
+    const amount = existing?.amount || fallback.amount || '1';
+    const unit = existing?.unit || fallback.unit || '份';
+    const resolvedCategory = existing?.category || category || this.inferCategoryFromName(name) || '其他';
+
+    if (existing) {
+      const newAmount = String(Math.round((parseFloat(existing.amount) + parseFloat(amount)) * 100) / 100);
+      this.state.fridge = this.state.fridge.map(item =>
+        item.name === name ? { ...item, amount: newAmount } : item
+      );
+      this.showToast(`已累加：${name} ${newAmount}${unit}`);
+    } else {
+      const newItem = this.normalizeFridgeItem({
+        id: `ingredient-${Date.now()}`,
+        name,
+        amount,
+        unit,
+        category: resolvedCategory
+      }, this.state.fridge.length);
+      this.state.fridge.unshift(newItem);
+      this.showToast(`已添加：${name} ${amount}${unit}`);
+    }
+
     this.saveState();
     this.render();
   },
@@ -839,6 +884,20 @@ const App = {
       unit: 'g',
       category: '其他'
     };
+  },
+
+  showToast(message) {
+    let toast = document.getElementById('app-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'app-toast';
+      toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.82);color:#fff;padding:10px 20px;border-radius:20px;font-size:14px;z-index:9999;opacity:0;transition:opacity 0.25s;pointer-events:none;max-width:80%;text-align:center;line-height:1.4;';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.style.opacity = '1';
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 2200);
   },
 
   addIngredientFromDraft() {
@@ -854,18 +913,35 @@ const App = {
     }
 
     const existingIndex = this.state.fridge.findIndex(item => item.name === name);
-    const nextItem = this.normalizeFridgeItem({
-      id: existingIndex >= 0 ? this.state.fridge[existingIndex].id : `ingredient-${Date.now()}`,
-      name,
-      amount,
-      unit,
-      category
-    }, existingIndex >= 0 ? existingIndex : this.state.fridge.length);
 
     if (existingIndex >= 0) {
-      this.state.fridge.splice(existingIndex, 1, nextItem);
+      const existing = this.state.fridge[existingIndex];
+      const accumulated = String(Math.round((parseFloat(existing.amount) + parseFloat(amount)) * 100) / 100);
+      const ok = confirm(`库存中已有「${name} ${existing.amount}${existing.unit}」。\n\n点"确定"：覆盖为 ${amount}${unit}\n点"取消"：累加为 ${accumulated}${existing.unit}`);
+      if (ok) {
+        const nextItem = this.normalizeFridgeItem({
+          id: existing.id,
+          name,
+          amount,
+          unit,
+          category
+        }, existingIndex);
+        this.state.fridge.splice(existingIndex, 1, nextItem);
+        this.showToast(`已更新：${name} ${amount}${unit}`);
+      } else {
+        this.state.fridge[existingIndex].amount = accumulated;
+        this.showToast(`已累加：${name} ${accumulated}${existing.unit}`);
+      }
     } else {
+      const nextItem = this.normalizeFridgeItem({
+        id: `ingredient-${Date.now()}`,
+        name,
+        amount,
+        unit,
+        category
+      }, this.state.fridge.length);
       this.state.fridge.unshift(nextItem);
+      this.showToast(`已添加：${name} ${amount}${unit}`);
     }
 
     this.resetIngredientDraft();

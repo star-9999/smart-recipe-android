@@ -2,8 +2,8 @@ const AI_PROVIDERS = {
   deepseek: {
     label: 'DeepSeek',
     url: 'https://api.deepseek.com/chat/completions',
-    models: ['deepseek-chat', 'deepseek-reasoner'],
-    defaultModel: 'deepseek-chat',
+    models: ['deepseek-flash', 'deepseek-reasoner', 'deepseek-chat'],
+    defaultModel: 'deepseek-flash',
     site: 'https://platform.deepseek.com',
     keyStorage: 'deepseek_api_key'
   },
@@ -88,22 +88,26 @@ const AI_API = {
   },
 
   async chatVision(imageDataUrl, textPrompt) {
-    const key = this.glmKey.trim();
+    const useDeepSeekVision = this.provider === 'deepseek' && this.model === 'deepseek-flash';
+    const provider = useDeepSeekVision ? AI_PROVIDERS.deepseek : AI_PROVIDERS.glm;
+    const model = useDeepSeekVision ? 'deepseek-flash' : VISION_MODEL;
+    const key = (useDeepSeekVision ? this.key : this.glmKey).trim();
+    const label = provider.label;
     if (!key) {
-      throw new Error('拍照识别需要智谱 GLM API Key，请先在设置中配置');
+      throw new Error(`拍照识别需要${label} API Key（当前视觉模型：${model}），请先在设置中配置`);
     }
     if (/[^\x00-\xFF]/.test(key)) {
-      throw new Error('智谱 GLM API Key 包含异常字符，请重新复制');
+      throw new Error(`${label} API Key 包含异常字符，请重新复制`);
     }
 
-    const res = await fetch(AI_PROVIDERS.glm.url, {
+    const res = await fetch(provider.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${key}`
       },
       body: JSON.stringify({
-        model: VISION_MODEL,
+        model,
         messages: [{
           role: 'user',
           content: [
@@ -1608,7 +1612,7 @@ const App = {
                 ${AI_API.config.models.map(m => `<option value="${m}" ${AI_API.model === m ? 'selected' : ''}>${m}</option>`).join('')}
               </select>
             </div>
-            <p class="support-copy">从 <a href="${AI_API.config.site}" target="_blank" rel="noreferrer">${AI_API.config.site}</a> 获取 ${AI_API.config.label} API Key。拍照识别固定使用智谱 GLM-4V 视觉模型。</p>
+            <p class="support-copy">从 <a href="${AI_API.config.site}" target="_blank" rel="noreferrer">${AI_API.config.site}</a> 获取 ${AI_API.config.label} API Key。拍照识别：选 DeepSeek-Flash 时用 DeepSeek 视觉，选智谱时用 GLM-4V。</p>
             <div class="settings-row">
               <input type="password" id="ai-key" class="search-input" placeholder="${AI_API.key ? '已配置（输入新值可覆盖）' : `输入你的 ${AI_API.config.label} API Key`}">
               <button class="primary-button" onclick="App.saveApiKey()">保存</button>

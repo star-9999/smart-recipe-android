@@ -1,26 +1,54 @@
-const GLM_API = {
-  key: localStorage.getItem('glm_api_key') || '',
-  url: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
-  model: 'glm-4-flash',
+const AI_PROVIDERS = {
+  deepseek: {
+    label: 'DeepSeek',
+    url: 'https://api.deepseek.com/chat/completions',
+    model: 'deepseek-chat',
+    site: 'https://platform.deepseek.com',
+    keyStorage: 'deepseek_api_key'
+  },
+  glm: {
+    label: '智谱 GLM',
+    url: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+    model: 'glm-4-flash',
+    site: 'https://open.bigmodel.cn',
+    keyStorage: 'glm_api_key'
+  }
+};
+
+const AI_API = {
+  provider: localStorage.getItem('ai_provider') || 'deepseek',
+
+  get config() {
+    return AI_PROVIDERS[this.provider] || AI_PROVIDERS.deepseek;
+  },
+
+  get key() {
+    return localStorage.getItem(this.config.keyStorage) || '';
+  },
+
+  setProvider(provider) {
+    if (!AI_PROVIDERS[provider]) return;
+    this.provider = provider;
+    localStorage.setItem('ai_provider', provider);
+  },
 
   setKey(key) {
-    this.key = key;
-    localStorage.setItem('glm_api_key', key);
+    localStorage.setItem(this.config.keyStorage, key);
   },
 
   async chat(messages) {
     if (!this.key) {
-      throw new Error('请先在设置中配置 GLM API Key');
+      throw new Error(`请先在设置中配置 ${this.config.label} API Key`);
     }
 
-    const res = await fetch(this.url, {
+    const res = await fetch(this.config.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.key}`
       },
       body: JSON.stringify({
-        model: this.model,
+        model: this.config.model,
         messages,
         temperature: 0.7,
         max_tokens: 2200
@@ -1320,16 +1348,22 @@ const App = {
           <section class="panel">
             <div class="panel-head compact">
               <div>
-                <p class="section-kicker">GLM API</p>
-                <h2>启用更细致的菜单建议</h2>
+                <p class="section-kicker">AI 模型</p>
+                <h2>选择模型并配置 API Key</h2>
               </div>
             </div>
-            <p class="support-copy">从 <a href="https://open.bigmodel.cn" target="_blank" rel="noreferrer">open.bigmodel.cn</a> 获取 API Key。未配置时，本地推荐仍可使用。</p>
+            <p class="support-copy">选择你想用的 AI 模型，然后填入对应平台的 API Key。未配置时，本地推荐仍可使用。</p>
+            <div class="chip-row" style="margin-bottom:12px;">
+              ${Object.entries(AI_PROVIDERS).map(([id, p]) => `
+                <button class="pref-chip ${AI_API.provider === id ? 'active' : ''}" onclick='App.setAiProvider(${JSON.stringify(id)})'>${this.escapeHtml(p.label)}</button>
+              `).join('')}
+            </div>
+            <p class="support-copy">从 <a href="${AI_API.config.site}" target="_blank" rel="noreferrer">${AI_API.config.site}</a> 获取 ${AI_API.config.label} API Key。</p>
             <div class="settings-row">
-              <input type="password" id="glm-key" class="search-input" placeholder="${GLM_API.key ? '已配置（输入新值可覆盖）' : '输入你的 GLM API Key'}">
+              <input type="password" id="ai-key" class="search-input" placeholder="${AI_API.key ? '已配置（输入新值可覆盖）' : `输入你的 ${AI_API.config.label} API Key`}">
               <button class="primary-button" onclick="App.saveApiKey()">保存</button>
             </div>
-            <p class="support-copy">${GLM_API.key ? '已配置，可以用 AI 生成今日菜单。' : '未配置，当前只使用本地规则推荐。'}</p>
+            <p class="support-copy">${AI_API.key ? `已配置 ${AI_API.config.label}，可以用 AI 生成今日菜单。` : `未配置 ${AI_API.config.label}，当前只使用本地规则推荐。`}</p>
           </section>
 
           <section class="panel">
@@ -1599,7 +1633,7 @@ const App = {
       }
     ];
 
-    return GLM_API.chat(messages);
+    return AI_API.chat(messages);
   },
 
   async aiRecommendRecipes() {
@@ -1639,7 +1673,7 @@ const App = {
     };
 
     try {
-      const reply = await GLM_API.chat([systemMsg, ...this.state.chatMessages.slice(-8)]);
+      const reply = await AI_API.chat([systemMsg, ...this.state.chatMessages.slice(-8)]);
       this.state.chatMessages.push({ role: 'assistant', content: reply });
     } catch (error) {
       this.state.chatMessages.push({
@@ -1667,10 +1701,15 @@ const App = {
     this.chat(`${name} 怎么做得更稳、更健康、更好吃？如果库存不够，请告诉我最重要的替代方案。`);
   },
 
+  setAiProvider(provider) {
+    AI_API.setProvider(provider);
+    this.render();
+  },
+
   saveApiKey() {
-    const key = document.getElementById('glm-key')?.value.trim();
+    const key = document.getElementById('ai-key')?.value.trim();
     if (!key) return;
-    GLM_API.setKey(key);
+    AI_API.setKey(key);
     this.render();
   },
 
@@ -1679,7 +1718,9 @@ const App = {
 
     localStorage.removeItem('cook_app_state');
     localStorage.removeItem('glm_api_key');
-    GLM_API.key = '';
+    localStorage.removeItem('deepseek_api_key');
+    localStorage.removeItem('ai_provider');
+    AI_API.provider = 'deepseek';
     this.state = {
       ...this.state,
       fridge: [],

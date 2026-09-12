@@ -1367,7 +1367,7 @@ const App = {
               <input type="password" id="ai-key" class="search-input" placeholder="${AI_API.key ? '已配置（输入新值可覆盖）' : `输入你的 ${AI_API.config.label} API Key`}">
               <button class="primary-button" onclick="App.saveApiKey()">保存</button>
             </div>
-            <p class="support-copy">${AI_API.key ? `已配置 ${AI_API.config.label}，可以用 AI 生成今日菜单。` : `未配置 ${AI_API.config.label}，当前只使用本地规则推荐。`}</p>
+            <p class="support-copy" id="api-save-status">${AI_API.key ? `已配置 ${AI_API.config.label}，可以用 AI 生成今日菜单。` : `未配置 ${AI_API.config.label}，当前只使用本地规则推荐。`}</p>
           </section>
 
           <section class="panel">
@@ -1710,11 +1710,53 @@ const App = {
     this.render();
   },
 
-  saveApiKey() {
-    const key = document.getElementById('ai-key')?.value.trim();
+  showApiSaveStatus(message, tone) {
+    const el = document.getElementById('api-save-status');
+    if (!el) return;
+    el.textContent = message;
+    el.style.color = tone === 'error' ? '#c0392b' : tone === 'success' ? '#1e8449' : '';
+  },
+
+  async saveApiKey() {
+    const input = document.getElementById('ai-key');
+    const key = input?.value.trim();
     if (!key) return;
-    AI_API.setKey(key);
-    this.render();
+
+    if (/[^\x00-\xFF]/.test(key)) {
+      this.showApiSaveStatus('API Key 包含异常字符，请重新复制（只保留 sk- 开头的那串字符）', 'error');
+      return;
+    }
+
+    const btn = input?.nextElementSibling;
+    const originalText = btn?.textContent;
+    if (btn) { btn.textContent = '验证中...'; btn.disabled = true; }
+
+    try {
+      const res = await fetch(AI_API.config.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${key}`
+        },
+        body: JSON.stringify({
+          model: AI_API.config.model,
+          messages: [{ role: 'user', content: 'ok' }],
+          max_tokens: 1
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || `验证失败（HTTP ${res.status}），请检查 Key 是否正确或账户是否有余额`);
+      }
+
+      AI_API.setKey(key);
+      this.showApiSaveStatus(`${AI_API.config.label} API Key 验证成功，已保存`, 'success');
+      this.render();
+    } catch (error) {
+      this.showApiSaveStatus(`验证未通过，未保存：${error.message}`, 'error');
+      if (btn) { btn.textContent = originalText; btn.disabled = false; }
+    }
   },
 
   clearData() {

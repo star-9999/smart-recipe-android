@@ -88,6 +88,9 @@ const AI_API = {
   },
 
   async chatVision(imageDataUrl, textPrompt) {
+    if (this.provider === 'deepseek' && this.model !== 'deepseek-flash') {
+      throw new Error('当前 DeepSeek 模型不支持视觉识别，请在 AI 状态栏切换到 deepseek-flash，或切换到智谱 GLM。');
+    }
     const useDeepSeekVision = this.provider === 'deepseek' && this.model === 'deepseek-flash';
     const provider = useDeepSeekVision ? AI_PROVIDERS.deepseek : AI_PROVIDERS.glm;
     const model = useDeepSeekVision ? 'deepseek-flash' : VISION_MODEL;
@@ -888,7 +891,7 @@ const App = {
       }
       this.openBatchPreview(items);
     } catch (error) {
-      alert(`解析失败：${error.message}`);
+      alert(`语音解析失败（${AI_API.config.label} · ${AI_API.model}）：${error.message}`);
     }
   },
 
@@ -937,7 +940,8 @@ const App = {
       }
       this.openBatchPreview(items);
     } catch (error) {
-      alert(`拍照识别失败：${error.message}`);
+      const visionModel = (AI_API.provider === 'deepseek' && AI_API.model === 'deepseek-flash') ? 'DeepSeek-Flash 视觉' : '智谱 GLM-4V';
+      alert(`拍照识别失败（${visionModel}）：${error.message}`);
     }
   },
 
@@ -1060,6 +1064,25 @@ const App = {
     `;
   },
 
+  renderAiStatusBar() {
+    const hasKey = !!AI_API.key.trim();
+    return `
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;background:#fef5ee;border:1px solid #f0d9c4;border-radius:10px;margin-bottom:14px;font-size:13px;">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${hasKey ? '#27ae60' : '#c0392b'};flex-shrink:0;"></span>
+        <span style="color:#7a5c3e;font-weight:600;">AI：</span>
+        <div class="chip-row" style="margin:0;">
+          ${Object.entries(AI_PROVIDERS).map(([id, p]) => `
+            <button class="pref-chip ${AI_API.provider === id ? 'active' : ''}" style="padding:3px 10px;font-size:12px;" onclick='App.setAiProvider(${JSON.stringify(id)})'>${this.escapeHtml(p.label)}</button>
+          `).join('')}
+        </div>
+        <select class="search-input" style="width:auto;padding:4px 8px;font-size:12px;min-width:130px;" onchange="App.setAiModel(this.value)">
+          ${AI_API.config.models.map(m => `<option value="${m}" ${AI_API.model === m ? 'selected' : ''}>${m}</option>`).join('')}
+        </select>
+        <a href="#" onclick="App.navigate('settings');return false;" style="color:${hasKey ? '#27ae60' : '#c0392b'};font-size:12px;font-weight:500;text-decoration:none;">${hasKey ? 'Key 已配置' : 'Key 未配置，点此去设置'}</a>
+      </div>
+    `;
+  },
+
   renderPlannerPage() {
     const recipes = this.matchRecipes();
     const menuPlan = this.getMenuPlan(recipes);
@@ -1078,6 +1101,8 @@ const App = {
           </div>
           ${this.renderHeroStats(recipes, menuPlan)}
         </header>
+
+        ${this.renderAiStatusBar()}
 
         <div class="mobile-stack">
           <section class="panel quick-input-panel">
@@ -1364,6 +1389,8 @@ const App = {
           </div>
         </header>
 
+        ${this.renderAiStatusBar()}
+
         <section class="panel featured-panel">
           <div class="panel-head">
             <div>
@@ -1549,6 +1576,8 @@ const App = {
             <h1>让厨师助手围绕你的库存和偏好回答问题。</h1>
           </div>
         </header>
+
+        ${this.renderAiStatusBar()}
 
         <div class="chat-layout panel">
           <div class="chat-hints">
@@ -1944,7 +1973,7 @@ const App = {
       const result = await this.aiRecommend();
       resultDiv.innerHTML = `<div class="ai-content">${this.formatMarkdown(result)}</div>`;
     } catch (error) {
-      resultDiv.innerHTML = `<div class="support-copy error-text">${this.escapeHtml(error.message)}</div>`;
+      resultDiv.innerHTML = `<div class="support-copy error-text">AI 生成失败（${AI_API.config.label} · ${AI_API.model}）：${this.escapeHtml(error.message)}。请检查上方 AI 状态栏的 Key 配置，或切换模型后重试。</div>`;
     }
   },
 
@@ -1975,7 +2004,7 @@ const App = {
     } catch (error) {
       this.state.chatMessages.push({
         role: 'assistant',
-        content: `暂时无法调用 AI：${error.message}`
+        content: `暂时无法调用 AI（${AI_API.config.label} · ${AI_API.model}）：${error.message}\n可在上方 AI 状态栏切换模型，或点"Key 未配置"去设置重新保存。`
       });
     }
 

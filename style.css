@@ -620,6 +620,90 @@ a {
   font-size: 22px;
 }
 
+/* 冰箱概览卡片 */
+.fridge-overview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+  border: 1px solid #fed7aa;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+}
+.fridge-overview:active {
+  background: linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%);
+}
+.fridge-overview.empty {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+.overview-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.overview-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.8);
+  font-size: 22px;
+}
+.overview-main strong {
+  display: block;
+  font-size: 15px;
+  color: #1a1a1a;
+}
+.overview-main span {
+  font-size: 12px;
+  color: #92400e;
+}
+.fridge-overview.empty .overview-main span {
+  color: #94a3b8;
+}
+.overview-cats {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.overview-cat-tag {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #92400e;
+  white-space: nowrap;
+}
+.overview-toggle {
+  font-size: 12px;
+  color: #c2410c;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+/* 库存分组 */
+.inventory-group {
+  margin-bottom: 16px;
+}
+.inventory-group:last-child {
+  margin-bottom: 0;
+}
+.inventory-group-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+  margin: 0 0 8px 4px;
+  letter-spacing: 0.02em;
+}
+
 .text-button,
 .inline-back {
   color: var(--muted);

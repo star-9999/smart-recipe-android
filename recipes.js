@@ -770,78 +770,257 @@ const RECIPES = [
   }
 ];
 
-// 食材分类数据库 - 常见冰箱食材
+// 食材分类数据库 - 三级分类：大类 → 子类 → 食材
 const INGREDIENT_CATEGORIES = {
-  "肉类": [
-    { name: "五花肉", emoji: "🥩" },
-    { name: "猪里脊", emoji: "🥩" },
-    { name: "排骨", emoji: "🍖" },
-    { name: "鸡肉", emoji: "🍗" },
-    { name: "鸡翅", emoji: "🍗" },
-    { name: "鸡翅根", emoji: "🍗" },
-    { name: "鸡胸肉", emoji: "🍗" },
-    { name: "羊肉", emoji: "🥩" },
-    { name: "牛肉", emoji: "🥩" },
-    { name: "肉末", emoji: "🥩" },
-    { name: "大虾", emoji: "🦐" },
-    { name: "鲈鱼", emoji: "🐟" },
-    { name: "草鱼", emoji: "🐟" },
-    { name: "虾仁", emoji: "🦐" }
-  ],
-  "蛋奶": [
-    { name: "鸡蛋", emoji: "🥚" },
-    { name: "牛奶", emoji: "🥛" }
-  ],
-  "蔬菜": [
-    { name: "西红柿", emoji: "🍅" },
-    { name: "青椒", emoji: "🫑" },
-    { name: "土豆", emoji: "🥔" },
-    { name: "茄子", emoji: "🍆" },
-    { name: "白菜", emoji: "🥬" },
-    { name: "青菜", emoji: "🥬" },
-    { name: "西兰花", emoji: "🥦" },
-    { name: "包菜", emoji: "🥬" },
-    { name: "胡萝卜", emoji: "🥕" },
-    { name: "黄瓜", emoji: "🥒" },
-    { name: "豆芽", emoji: "🌱" },
-    { name: "玉米", emoji: "🌽" },
-    { name: "蒜苗", emoji: "🧅" },
-    { name: "酸菜", emoji: "🥬" },
-    { name: "木耳", emoji: "🍄" },
-    { name: "青豆", emoji: "🫛" }
-  ],
-  "主食": [
-    { name: "米饭", emoji: "🍚" },
-    { name: "面粉", emoji: "🌾" },
-    { name: "面条", emoji: "🍜" }
-  ],
-  "调料": [
-    { name: "酱油", emoji: "🫙" },
-    { name: "醋", emoji: "🫙" },
-    { name: "盐", emoji: "🧂" },
-    { name: "白糖", emoji: "🍬" },
-    { name: "料酒", emoji: "🍶" },
-    { name: "豆瓣酱", emoji: "🫙" },
-    { name: "淀粉", emoji: "🫙" },
-    { name: "生姜", emoji: "🫚" },
-    { name: "蒜", emoji: "🧄" },
-    { name: "葱", emoji: "🧅" },
-    { name: "干辣椒", emoji: "🌶️" },
-    { name: "花椒", emoji: "🫙" },
-    { name: "八角", emoji: "⭐" },
-    { name: "食用油", emoji: "🫒" },
-    { name: "蚝油", emoji: "🫙" },
-    { name: "番茄酱", emoji: "🍅" },
-    { name: "冰糖", emoji: "🍬" },
-    { name: "蒸鱼豉油", emoji: "🫙" },
-    { name: "香油", emoji: "🫙" },
-    { name: "孜然粉", emoji: "🫙" }
-  ],
-  "饮品/其他": [
-    { name: "可乐", emoji: "🥤" },
-    { name: "茶叶", emoji: "🍵" },
-    { name: "紫菜", emoji: "🟢" },
-    { name: "花生米", emoji: "🥜" },
-    { name: "火腿", emoji: "🌭" }
-  ]
+  "肉类": {
+    "猪肉": [
+      { name: "五花肉", emoji: "🥩" },
+      { name: "猪里脊", emoji: "🥩" },
+      { name: "排骨", emoji: "🍖" },
+      { name: "猪肉", emoji: "🥩" },
+      { name: "肉末", emoji: "🥩" },
+      { name: "猪蹄", emoji: "🦴" }
+    ],
+    "牛肉": [
+      { name: "牛肉", emoji: "🥩" },
+      { name: "牛腩", emoji: "🥩" },
+      { name: "肥牛", emoji: "🥩" }
+    ],
+    "鸡肉": [
+      { name: "鸡肉", emoji: "🍗" },
+      { name: "鸡翅", emoji: "🍗" },
+      { name: "鸡翅根", emoji: "🍗" },
+      { name: "鸡翅中", emoji: "🍗" },
+      { name: "鸡翅尖", emoji: "🍗" },
+      { name: "鸡胸肉", emoji: "🍗" },
+      { name: "鸡腿肉", emoji: "🍗" },
+      { name: "鸡爪", emoji: "🍗" },
+      { name: "鸡杂", emoji: "🍗" }
+    ],
+    "羊肉": [
+      { name: "羊肉", emoji: "🥩" }
+    ],
+    "鱼肉海鲜": [
+      { name: "大虾", emoji: "🦐" },
+      { name: "虾仁", emoji: "🦐" },
+      { name: "河虾", emoji: "🦐" },
+      { name: "虾滑", emoji: "🦐" },
+      { name: "鲈鱼", emoji: "🐟" },
+      { name: "草鱼", emoji: "🐟" },
+      { name: "鱼片", emoji: "🐟" },
+      { name: "鱼头", emoji: "🐟" },
+      { name: "银鱼", emoji: "🐟" },
+      { name: "鱿鱼", emoji: "🦑" }
+    ],
+    "加工肉蛋": [
+      { name: "香肠", emoji: "🌭" },
+      { name: "肉丸", emoji: "🍡" },
+      { name: "鹌鹑蛋", emoji: "🥚" },
+      { name: "咸蛋黄", emoji: "🥚" },
+      { name: "皮蛋", emoji: "🥚" },
+      { name: "烤鸭", emoji: "🦆" },
+      { name: "肥肠", emoji: "🥩" },
+      { name: "牛杂", emoji: "🥩" },
+      { name: "猪杂", emoji: "🥩" }
+    ]
+  },
+  "蛋奶": {
+    "蛋类": [
+      { name: "鸡蛋", emoji: "🥚" }
+    ],
+    "奶制品": [
+      { name: "牛奶", emoji: "🥛" },
+      { name: "奶油", emoji: "🥛" },
+      { name: "炼乳", emoji: "🥛" }
+    ]
+  },
+  "蔬菜": {
+    "叶菜": [
+      { name: "白菜", emoji: "🥬" },
+      { name: "青菜", emoji: "🥬" },
+      { name: "娃娃菜", emoji: "🥬" },
+      { name: "菠菜", emoji: "🥬" },
+      { name: "生菜", emoji: "🥬" },
+      { name: "油麦菜", emoji: "🥬" },
+      { name: "芹菜", emoji: "🥬" },
+      { name: "菜苔", emoji: "🥬" },
+      { name: "蒜苗", emoji: "🧅" },
+      { name: "蒜苔", emoji: "🧅" },
+      { name: "蒜黄", emoji: "🧅" },
+      { name: "香菜", emoji: "🌿" }
+    ],
+    "根茎": [
+      { name: "土豆", emoji: "🥔" },
+      { name: "胡萝卜", emoji: "🥕" },
+      { name: "白萝卜", emoji: "🥕" },
+      { name: "红薯", emoji: "🍠" },
+      { name: "山药", emoji: "🥔" },
+      { name: "芋头", emoji: "🥔" },
+      { name: "莴笋", emoji: "🥬" },
+      { name: "莲藕", emoji: "🪷" }
+    ],
+    "瓜果": [
+      { name: "西红柿", emoji: "🍅" },
+      { name: "茄子", emoji: "🍆" },
+      { name: "黄瓜", emoji: "🥒" },
+      { name: "冬瓜", emoji: "🥒" },
+      { name: "南瓜", emoji: "🎃" },
+      { name: "青椒", emoji: "🫑" },
+      { name: "小米辣", emoji: "🌶️" },
+      { name: "螺丝椒", emoji: "🫑" },
+      { name: "线椒", emoji: "🫑" },
+      { name: "洋葱", emoji: "🧅" },
+      { name: "包菜", emoji: "🥬" },
+      { name: "西兰花", emoji: "🥦" }
+    ],
+    "豆菌笋": [
+      { name: "豆芽", emoji: "🌱" },
+      { name: "毛豆", emoji: "🫛" },
+      { name: "蚕豆", emoji: "🫛" },
+      { name: "青豆", emoji: "🫛" },
+      { name: "玉米", emoji: "🌽" },
+      { name: "木耳", emoji: "🍄" },
+      { name: "香菇", emoji: "🍄" },
+      { name: "金针菇", emoji: "🍄" },
+      { name: "菌菇", emoji: "🍄" },
+      { name: "笋", emoji: "🎋" },
+      { name: "笋干", emoji: "🎋" },
+      { name: "酸菜", emoji: "🥬" },
+      { name: "梅干菜", emoji: "🥬" }
+    ],
+    "海菜": [
+      { name: "海带", emoji: "🟢" },
+      { name: "紫菜", emoji: "🟢" }
+    ],
+    "干货果料": [
+      { name: "红枣", emoji: "🌰" },
+      { name: "枸杞", emoji: "🔴" },
+      { name: "莲子", emoji: "⚪" },
+      { name: "板栗", emoji: "🌰" }
+    ],
+    "水果": [
+      { name: "菠萝", emoji: "🍍" },
+      { name: "柠檬", emoji: "🍋" }
+    ]
+  },
+  "豆制品": {
+    "豆腐制品": [
+      { name: "豆腐", emoji: "🧈" },
+      { name: "豆腐干", emoji: "🧈" },
+      { name: "千张", emoji: "🧈" },
+      { name: "腐竹", emoji: "🥢" },
+      { name: "素鸡", emoji: "🧈" }
+    ],
+    "豆类": [
+      { name: "黄豆", emoji: "🫘" },
+      { name: "红豆", emoji: "🫘" },
+      { name: "豆沙", emoji: "🫘" },
+      { name: "豆浆", emoji: "🥛" }
+    ]
+  },
+  "主食": {
+    "米面杂粮": [
+      { name: "米饭", emoji: "🍚" },
+      { name: "糯米", emoji: "🍚" },
+      { name: "小米", emoji: "🌾" },
+      { name: "黑米", emoji: "🌾" },
+      { name: "杂粮", emoji: "🌾" },
+      { name: "玉米碴", emoji: "🌽" },
+      { name: "面粉", emoji: "🌾" },
+      { name: "面条", emoji: "🍜" },
+      { name: "米线", emoji: "🍜" },
+      { name: "粉丝", emoji: "🍜" },
+      { name: "粉条", emoji: "🍜" },
+      { name: "意大利面", emoji: "🍝" },
+      { name: "年糕", emoji: "🍡" },
+      { name: "面包糠", emoji: "🍞" }
+    ],
+    "面点": [
+      { name: "馒头", emoji: "🥟" },
+      { name: "花卷", emoji: "🥟" },
+      { name: "包子", emoji: "🥟" },
+      { name: "饺子", emoji: "🥟" },
+      { name: "馄饨", emoji: "🥟" },
+      { name: "烧麦", emoji: "🥟" },
+      { name: "春卷", emoji: "🥟" },
+      { name: "油条", emoji: "🥖" },
+      { name: "卷饼", emoji: "🌯" },
+      { name: "馅饼", emoji: "🥧" }
+    ]
+  },
+  "调料": {
+    "油盐酱醋酒": [
+      { name: "食用油", emoji: "🫒" },
+      { name: "盐", emoji: "🧂" },
+      { name: "酱油", emoji: "🫙" },
+      { name: "醋", emoji: "🫙" },
+      { name: "陈醋", emoji: "🫙" },
+      { name: "白醋", emoji: "🫙" },
+      { name: "白糖", emoji: "🍬" },
+      { name: "冰糖", emoji: "🍬" },
+      { name: "红糖", emoji: "🍬" },
+      { name: "料酒", emoji: "🍶" },
+      { name: "花雕酒", emoji: "🍶" },
+      { name: "啤酒", emoji: "🍺" },
+      { name: "酒酿", emoji: "🍶" }
+    ],
+    "酱料": [
+      { name: "豆瓣酱", emoji: "🫙" },
+      { name: "蚝油", emoji: "🫙" },
+      { name: "番茄酱", emoji: "🍅" },
+      { name: "剁椒", emoji: "🌶️" },
+      { name: "泡椒", emoji: "🌶️" },
+      { name: "蒜蓉酱", emoji: "🧄" },
+      { name: "芝麻酱", emoji: "🫙" },
+      { name: "蒸鱼豉油", emoji: "🫙" }
+    ],
+    "香辛料": [
+      { name: "生姜", emoji: "🫚" },
+      { name: "蒜", emoji: "🧄" },
+      { name: "葱", emoji: "🧅" },
+      { name: "干辣椒", emoji: "🌶️" },
+      { name: "花椒", emoji: "🫙" },
+      { name: "八角", emoji: "⭐" },
+      { name: "孜然粉", emoji: "🫙" },
+      { name: "白胡椒粉", emoji: "🫙" },
+      { name: "黑胡椒粉", emoji: "🫙" },
+      { name: "花椒油", emoji: "🫙" },
+      { name: "辣椒油", emoji: "🌶️" },
+      { name: "香油", emoji: "🫙" },
+      { name: "鸡油", emoji: "🫙" },
+      { name: "十三香", emoji: "🫙" },
+      { name: "桂皮", emoji: "🪵" },
+      { name: "香叶", emoji: "🍃" }
+    ],
+    "增鲜粉": [
+      { name: "鸡精", emoji: "🫙" },
+      { name: "味精", emoji: "🫙" },
+      { name: "淀粉", emoji: "🫙" },
+      { name: "小苏打", emoji: "🫙" },
+      { name: "碱粉", emoji: "🫙" },
+      { name: "蒸肉粉", emoji: "🫙" }
+    ],
+    "其他": [
+      { name: "芝麻", emoji: "⚪" }
+    ]
+  },
+  "饮品/其他": {
+    "饮品": [
+      { name: "可乐", emoji: "🥤" },
+      { name: "雪碧", emoji: "🥤" },
+      { name: "茶饮", emoji: "🍵" },
+      { name: "茶叶", emoji: "🍵" },
+      { name: "椰乳", emoji: "🥥" },
+      { name: "劲酒", emoji: "🍶" },
+      { name: "冰块", emoji: "🧊" },
+      { name: "水", emoji: "💧" }
+    ],
+    "零食半成品": [
+      { name: "花生米", emoji: "🥜" },
+      { name: "火腿", emoji: "🌭" },
+      { name: "汉堡", emoji: "🍔" },
+      { name: "薯条", emoji: "🍟" },
+      { name: "洋葱圈", emoji: "🧅" }
+    ]
+  }
 };

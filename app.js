@@ -200,9 +200,11 @@ const STATUS_META = {
   idea: { label: '先作备选灵感', tone: 'idea' }
 };
 
-const INGREDIENT_LOOKUP = Object.entries(INGREDIENT_CATEGORIES).reduce((acc, [category, items]) => {
-  items.forEach(item => {
-    acc[item.name] = { emoji: item.emoji, category };
+const INGREDIENT_LOOKUP = Object.entries(INGREDIENT_CATEGORIES).reduce((acc, [category, subs]) => {
+  Object.entries(subs).forEach(([sub, items]) => {
+    items.forEach(item => {
+      acc[item.name] = { emoji: item.emoji, category, subCategory: sub };
+    });
   });
   return acc;
 }, {});
@@ -217,6 +219,8 @@ const App = {
     chatMessages: [],
     page: 'planner',
     activeCategory: '全部',
+    activeSubCategory: '全部',
+    inventoryExpanded: true,
     ingredientSearch: '',
     modal: null,
     ingredientDraft: {
@@ -650,13 +654,127 @@ const App = {
 
     const rows = [];
     categories.forEach(category => {
-      (INGREDIENT_CATEGORIES[category] || []).forEach(item => {
-        if (!search || item.name.toLowerCase().includes(search)) {
-          rows.push({ ...item, category });
-        }
+      const subs = INGREDIENT_CATEGORIES[category] || {};
+      Object.entries(subs).forEach(([sub, items]) => {
+        if (this.state.activeSubCategory !== '全部' && this.state.activeSubCategory !== sub) return;
+        items.forEach(item => {
+          if (!search || item.name.toLowerCase().includes(search)) {
+            rows.push({ ...item, category, subCategory: sub });
+          }
+        });
       });
     });
     return rows;
+  },
+
+  getFridgeByCategory() {
+    const groups = {};
+    const categoryOrder = Object.keys(INGREDIENT_CATEGORIES);
+    this.state.fridge.forEach(item => {
+      const cat = item.category && item.category !== '其他'
+        ? item.category
+        : (this.inferCategoryFromName(item.name) || '其他');
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(item);
+    });
+    const sorted = {};
+    categoryOrder.forEach(cat => { if (groups[cat]) sorted[cat] = groups[cat]; });
+    Object.keys(groups).forEach(cat => { if (!sorted[cat]) sorted[cat] = groups[cat]; });
+    return sorted;
+  },
+
+  getCategoryEmoji(cat) {
+    const subs = INGREDIENT_CATEGORIES[cat];
+    if (subs) {
+      const firstSub = Object.values(subs)[0];
+      if (firstSub && firstSub[0]) return firstSub[0].emoji;
+    }
+    return '📦';
+  },
+
+  toggleInventory() {
+    this.state.inventoryExpanded = !this.state.inventoryExpanded;
+    this.render();
+  },
+
+  renderFridgeOverview() {
+    const total = this.state.fridge.length;
+    if (total === 0) {
+      return `
+        <div class="fridge-overview empty" onclick="App.toggleInventory()">
+          <div class="overview-main">
+            <span class="overview-icon">📦</span>
+            <div>
+              <strong>我的冰箱</strong>
+              <span>还没有添加食材</span>
+            </div>
+          </div>
+          <span class="overview-toggle">去添加 ▼</span>
+        </div>
+      `;
+    }
+    const groups = this.getFridgeByCategory();
+    return `
+      <div class="fridge-overview" onclick="App.toggleInventory()">
+        <div class="overview-main">
+          <span class="overview-icon">📦</span>
+          <div>
+            <strong>我的冰箱</strong>
+            <span>${total} 项食材</span>
+          </div>
+        </div>
+        <div class="overview-cats">
+          ${Object.entries(groups).map(([cat, items]) => `
+            <span class="overview-cat-tag">${this.getCategoryEmoji(cat)} ${cat} ${items.length}</span>
+          `).join('')}
+        </div>
+        <span class="overview-toggle">${this.state.inventoryExpanded ? '收起 ▲' : '展开 ▼'}</span>
+      </div>
+    `;
+  },
+
+  renderGroupedInventory() {
+    if (!this.state.inventoryExpanded) return '';
+    if (!this.state.fridge.length) {
+      return `
+        <div class="empty-state">
+          <p>先从上面的输入条开始，一项一项加食材，推荐会更准。</p>
+        </div>
+      `;
+    }
+    const groups = this.getFridgeByCategory();
+    return `
+      <div class="inventory-list">
+        ${Object.entries(groups).map(([cat, items]) => `
+          <div class="inventory-group">
+            <p class="inventory-group-title">${this.getCategoryEmoji(cat)} ${cat}（${items.length}项）</p>
+            ${items.map(item => {
+              const meta = this.getIngredientMeta(item.name, item.category);
+              return `
+                <div class="inventory-row">
+                  <div class="inventory-main">
+                    <span class="inventory-icon">${this.escapeHtml(meta.emoji)}</span>
+                    <div>
+                      <strong>${this.escapeHtml(item.name)}</strong>
+                      <span>${this.escapeHtml(item.category)}</span>
+                    </div>
+                  </div>
+                  <div class="inventory-qty">
+                    <button onclick='App.nudgeIngredient(${JSON.stringify(item.name)}, -1)'>−</button>
+                    <strong>${this.escapeHtml(item.amount)}${this.escapeHtml(item.unit)}</strong>
+                    <button onclick='App.nudgeIngredient(${JSON.stringify(item.name)}, 1)'>+</button>
+                  </div>
+                  <div class="inventory-actions">
+                    <button class="text-button" onclick='App.editIngredient(${JSON.stringify(item.name)})'>编辑</button>
+                    <button class="text-button danger" onclick='App.removeFromFridge(${JSON.stringify(item.name)})'>删除</button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `).join('')}
+      </div>
+    `;
   },
 
   syncDraftCategory() {
@@ -673,8 +791,11 @@ const App = {
   },
 
   inferCategoryFromName(name) {
-    const matched = Object.entries(INGREDIENT_CATEGORIES).find(([, items]) => items.some(item => item.name === name));
-    if (matched) return matched[0];
+    for (const [category, subs] of Object.entries(INGREDIENT_CATEGORIES)) {
+      for (const items of Object.values(subs)) {
+        if (items.some(item => item.name === name)) return category;
+      }
+    }
 
     const lowerName = name.toLowerCase();
     if (['鸡', '牛', '猪', '羊', '虾', '鱼', '肉'].some(keyword => lowerName.includes(keyword))) return '肉类';
@@ -1161,7 +1282,7 @@ const App = {
     const filteredIngredients = this.getFilteredIngredients();
     const preference = PREFERENCE_PRESETS[this.state.preference];
     const draft = this.state.ingredientDraft;
-    const suggestionRows = filteredIngredients.slice(0, 16);
+    const suggestionRows = filteredIngredients.slice(0, 48);
 
     return `
       <section class="page planner-page">
@@ -1177,6 +1298,11 @@ const App = {
         ${this.renderAiStatusBar()}
 
         <div class="mobile-stack">
+          ${this.renderFridgeOverview()}
+          <section class="panel inventory-panel">
+            ${this.renderGroupedInventory()}
+          </section>
+
           <section class="panel quick-input-panel">
             <div class="panel-head mobile-tight">
               <div>
@@ -1323,48 +1449,6 @@ const App = {
             </div>
           </section>
 
-          <section class="panel inventory-panel">
-            <div class="panel-head mobile-tight">
-              <div>
-                <p class="section-kicker">库存管理</p>
-                <h2>已添加的食材</h2>
-              </div>
-              <span class="summary-badge">${this.state.fridge.length} 项</span>
-            </div>
-
-            ${this.state.fridge.length ? `
-              <div class="inventory-list">
-                ${this.state.fridge.map(item => {
-                  const meta = this.getIngredientMeta(item.name, item.category);
-                  return `
-                    <div class="inventory-row">
-                      <div class="inventory-main">
-                        <span class="inventory-icon">${this.escapeHtml(meta.emoji)}</span>
-                        <div>
-                          <strong>${this.escapeHtml(item.name)}</strong>
-                          <span>${this.escapeHtml(item.category)}</span>
-                        </div>
-                      </div>
-                      <div class="inventory-qty">
-                        <button onclick='App.nudgeIngredient(${JSON.stringify(item.name)}, -1)'>−</button>
-                        <strong>${this.escapeHtml(item.amount)}${this.escapeHtml(item.unit)}</strong>
-                        <button onclick='App.nudgeIngredient(${JSON.stringify(item.name)}, 1)'>+</button>
-                      </div>
-                      <div class="inventory-actions">
-                        <button class="text-button" onclick='App.editIngredient(${JSON.stringify(item.name)})'>编辑</button>
-                        <button class="text-button danger" onclick='App.removeFromFridge(${JSON.stringify(item.name)})'>删除</button>
-                      </div>
-                    </div>
-                  `;
-                }).join('')}
-              </div>
-            ` : `
-              <div class="empty-state">
-                <p>先从上面的输入条开始，一项一项加食材，推荐会更准。</p>
-              </div>
-            `}
-          </section>
-
           <section class="panel browser-panel">
             <div class="panel-head mobile-tight">
               <div>
@@ -1391,20 +1475,18 @@ const App = {
               `).join('')}
             </div>
 
-            <div class="suggestion-grid">
-              ${suggestionRows.length ? suggestionRows.map(item => {
-                const hasItem = this.state.fridge.some(entry => entry.name === item.name);
-                return `
-                  <button class="suggestion-chip ${hasItem ? 'selected' : ''}" onclick='App.applySuggestedIngredient(${JSON.stringify(item.name)}, ${JSON.stringify(item.category)})'>
-                    <span>${this.escapeHtml(item.emoji)}</span>
-                    <strong>${this.escapeHtml(item.name)}</strong>
+            ${this.state.activeCategory !== '全部' ? `
+              <div class="chip-row category-row" style="margin-top:6px;">
+                ${['全部', ...Object.keys(INGREDIENT_CATEGORIES[this.state.activeCategory] || {})].map(sub => `
+                  <button class="category-chip ${sub === this.state.activeSubCategory ? 'active' : ''}" onclick='App.setActiveSubCategory(${JSON.stringify(sub)})' style="font-size:12px;padding:4px 10px;">
+                    ${this.escapeHtml(sub)}
                   </button>
-                `;
-              }).join('') : `
-                <div class="empty-state subtle">
-                  <p>没找到匹配食材，直接在上面输入名字即可。</p>
-                </div>
-              `}
+                `).join('')}
+              </div>
+            ` : ''}
+
+            <div class="suggestion-grid">
+              ${this.renderSuggestionGroups(suggestionRows)}
             </div>
           </section>
         </div>
@@ -1876,7 +1958,38 @@ const App = {
 
   setActiveCategory(category) {
     this.state.activeCategory = category;
+    this.state.activeSubCategory = '全部';
     this.render();
+  },
+
+  setActiveSubCategory(sub) {
+    this.state.activeSubCategory = sub;
+    this.render();
+  },
+
+  renderSuggestionGroups(rows) {
+    if (!rows.length) {
+      return `<div class="empty-state subtle" style="grid-column:1/-1;"><p>没找到匹配食材，直接在上面输入名字即可。</p></div>`;
+    }
+    const order = [];
+    const groups = {};
+    rows.forEach(item => {
+      const key = item.subCategory || item.category || '其他';
+      if (!order.includes(key)) { order.push(key); groups[key] = []; }
+      groups[key].push(item);
+    });
+    return order.map(key => `
+      <p style="grid-column:1/-1;font-size:12px;color:#999;margin:8px 0 0;font-weight:600;">${this.escapeHtml(key)}</p>
+      ${groups[key].map(item => {
+        const hasItem = this.state.fridge.some(entry => entry.name === item.name);
+        return `
+          <button class="suggestion-chip ${hasItem ? 'selected' : ''}" onclick='App.applySuggestedIngredient(${JSON.stringify(item.name)}, ${JSON.stringify(item.category)})'>
+            <span>${this.escapeHtml(item.emoji)}</span>
+            <strong>${this.escapeHtml(item.name)}</strong>
+          </button>
+        `;
+      }).join('')}
+    `).join('');
   },
 
   getInventoryNudge(unit) {
@@ -2171,6 +2284,8 @@ const App = {
       chatMessages: [],
       page: 'planner',
       activeCategory: '全部',
+      activeSubCategory: '全部',
+      inventoryExpanded: true,
       ingredientSearch: '',
       modal: null,
       ingredientDraft: {

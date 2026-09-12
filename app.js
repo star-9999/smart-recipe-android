@@ -17,8 +17,6 @@ const AI_PROVIDERS = {
   }
 };
 
-const VISION_MODEL = 'glm-4v';
-
 const AI_API = {
   provider: localStorage.getItem('ai_provider') || 'glm',
 
@@ -42,6 +40,18 @@ const AI_API = {
       if (p.models.includes(m)) return id;
     }
     return this.provider;
+  },
+
+  get visionModel() {
+    const saved = localStorage.getItem('ai_vision_model');
+    const valid = ['glm-4v', 'glm-4v-flash', 'deepseek-flash'];
+    if (saved && valid.includes(saved)) return saved;
+    return 'glm-4v';
+  },
+
+  setVisionModel(model) {
+    const valid = ['glm-4v', 'glm-4v-flash', 'deepseek-flash'];
+    if (valid.includes(model)) localStorage.setItem('ai_vision_model', model);
   },
 
   get key() {
@@ -102,22 +112,18 @@ const AI_API = {
   },
 
   async chatVision(imageDataUrl, textPrompt) {
-    if (this.modelProvider === 'deepseek' && this.model !== 'deepseek-flash') {
-      throw new Error('当前 DeepSeek 模型不支持视觉识别，请在"语音问答"页切换到 deepseek-flash，或切换到智谱 GLM。');
-    }
-    const useDeepSeekVision = this.modelProvider === 'deepseek' && this.model === 'deepseek-flash';
-    const provider = useDeepSeekVision ? AI_PROVIDERS.deepseek : AI_PROVIDERS.glm;
-    const model = useDeepSeekVision ? 'deepseek-flash' : VISION_MODEL;
-    const key = (useDeepSeekVision ? this.key : this.glmKey).trim();
-    const label = provider.label;
+    const model = this.visionModel;
+    const providerId = model === 'deepseek-flash' ? 'deepseek' : 'glm';
+    const config = AI_PROVIDERS[providerId];
+    const key = (localStorage.getItem(config.keyStorage) || '').trim();
     if (!key) {
-      throw new Error(`拍照识别需要${label} API Key（当前视觉模型：${model}），请先在设置中配置`);
+      throw new Error(`拍照识别需要${config.label} API Key（视觉模型：${model}），请先在"偏好与 API"中配置`);
     }
     if (/[^\x00-\xFF]/.test(key)) {
-      throw new Error(`${label} API Key 包含异常字符，请重新复制`);
+      throw new Error(`${config.label} API Key 包含异常字符，请重新复制`);
     }
 
-    const res = await fetch(provider.url, {
+    const res = await fetch(config.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -821,6 +827,11 @@ const App = {
     this.render();
   },
 
+  setVisionModel(model) {
+    AI_API.setVisionModel(model);
+    this.render();
+  },
+
   parseJsonArray(text) {
     const cleaned = String(text || '').replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
     try {
@@ -958,8 +969,7 @@ const App = {
       }
       this.openBatchPreview(items);
     } catch (error) {
-      const visionModel = (AI_API.provider === 'deepseek' && AI_API.model === 'deepseek-flash') ? 'DeepSeek-Flash 视觉' : '智谱 GLM-4V';
-      alert(`拍照识别失败（${visionModel}）：${error.message}`);
+      alert(`拍照识别失败（视觉模型：${AI_API.visionModel}）：${error.message}`);
     }
   },
 
@@ -1089,7 +1099,7 @@ const App = {
     return `
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 12px;background:#fafafa;border:1px solid #eee;border-radius:8px;margin-bottom:12px;font-size:12px;color:#666;">
         <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${hasKey ? '#27ae60' : '#c0392b'};flex-shrink:0;"></span>
-        <span>AI 模型：${config.label} · ${AI_API.model}</span>
+        <span>对话：${AI_API.model} · 视觉：${AI_API.visionModel}</span>
         <a href="#" onclick="App.navigate('settings');return false;" style="color:${hasKey ? '#27ae60' : '#c0392b'};margin-left:auto;text-decoration:none;font-weight:500;">${hasKey ? '已配置' : '未配置，点此配置'}</a>
       </div>
     `;
@@ -1097,6 +1107,7 @@ const App = {
 
   renderChatModelSelector() {
     const configured = Object.entries(AI_PROVIDERS).filter(([id, p]) => !!(localStorage.getItem(p.keyStorage) || '').trim());
+    const deepseekConfigured = configured.some(([id]) => id === 'deepseek');
 
     if (configured.length) {
       const currentProviderConfigured = configured.some(([id]) => id === AI_API.modelProvider);
@@ -1125,6 +1136,15 @@ const App = {
             ? `<span style="color:#27ae60;">已配置：${configured.map(([_, p]) => p.label).join('、')}</span>`
             : `<a href="#" onclick="App.navigate('settings');return false;" style="color:#c0392b;text-decoration:none;">未配置 API，点此去设置</a>`}
         </span>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;width:100%;margin-top:6px;padding-top:8px;border-top:1px dashed #e8d5c0;">
+          <span style="color:#7a5c3e;font-weight:600;">视觉模型：</span>
+          <select class="search-input" style="width:auto;padding:6px 10px;font-size:13px;min-width:180px;" onchange="App.setVisionModel(this.value)">
+            <option value="glm-4v" ${AI_API.visionModel === 'glm-4v' ? 'selected' : ''}>智谱 GLM · glm-4v</option>
+            <option value="glm-4v-flash" ${AI_API.visionModel === 'glm-4v-flash' ? 'selected' : ''}>智谱 GLM · glm-4v-flash</option>
+            ${deepseekConfigured ? `<option value="deepseek-flash" ${AI_API.visionModel === 'deepseek-flash' ? 'selected' : ''}>DeepSeek · deepseek-flash</option>` : ''}
+          </select>
+          <span style="color:#999;font-size:12px;">用于拍照识别食材，默认 glm-4v</span>
+        </div>
       </div>
     `;
   },

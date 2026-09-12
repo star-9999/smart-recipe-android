@@ -1,6 +1,6 @@
 // Service worker: precaches the app shell so the installed app works offline.
 // Bump CACHE version whenever the app files change.
-const CACHE = 'recipe-pwa-v7';
+const CACHE = 'recipe-pwa-v8';
 const ASSETS = [
   './',
   './index.html',

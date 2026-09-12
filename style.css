@@ -130,10 +130,10 @@ a {
 
 .planner-hero h1,
 .page-header-block h1 {
-  font-size: clamp(30px, 10vw, 48px);
-  line-height: 0.98;
-  letter-spacing: -0.06em;
-  max-width: 11ch;
+  font-size: clamp(24px, 5.5vw, 36px);
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  max-width: 20ch;
 }
 
 .hero-subtitle,
@@ -457,6 +457,25 @@ a {
   border-color: transparent;
 }
 
+/* 快速录入区的分类选择：小一号、描边样式，与筛选chip区分 */
+.draft-category-chip {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.draft-category-chip.active {
+  background: #fff7ed;
+  border-color: #fb923c;
+  color: #c2410c;
+  font-weight: 600;
+}
+
 .composer-actions,
 .chat-input-row,
 .settings-row,
@@ -637,8 +656,8 @@ a {
   background: linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%);
 }
 .fridge-overview.empty {
-  background: #f8fafc;
-  border-color: #e2e8f0;
+  background: #fff7ed;
+  border-color: #fed7aa;
 }
 .overview-main {
   display: flex;
@@ -692,52 +711,64 @@ a {
 /* 库存分组 */
 .inventory-group {
   margin-bottom: 16px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
 }
 .inventory-group:last-child {
   margin-bottom: 0;
 }
 .inventory-group-title {
+  grid-column: 1 / -1;
   font-size: 13px;
   font-weight: 700;
   color: #64748b;
-  margin: 0 0 8px 4px;
+  margin: 0 0 2px 4px;
   letter-spacing: 0.02em;
 }
 
-/* 紧凑库存行 */
+/* 紧凑库存卡片（4列网格） */
 .inventory-compact-row {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  justify-content: center;
+  gap: 2px;
+  padding: 10px 4px 8px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.85);
   border: 1px solid var(--line);
   cursor: pointer;
-  transition: background 0.15s;
-  margin-bottom: 6px;
-}
-.inventory-compact-row:last-child {
-  margin-bottom: 0;
+  transition: background 0.15s, transform 0.1s;
+  text-align: center;
 }
 .inventory-compact-row:active {
   background: #f1f5f9;
+  transform: scale(0.96);
 }
 .inventory-compact-row .inventory-icon {
-  width: 32px;
-  height: 32px;
-  font-size: 18px;
+  width: 36px;
+  height: 36px;
+  font-size: 22px;
   border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 .inventory-compact-row strong {
-  flex: 1;
-  font-size: 14px;
+  font-size: 12px;
   color: #1a1a1a;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 .compact-amount {
-  font-size: 13px;
-  color: #64748b;
+  font-size: 11px;
+  color: #94a3b8;
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -1102,11 +1133,14 @@ a {
   }
 
   .nav-link span {
-    display: none;
+    font-size: 14px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 600;
   }
 
   .nav-link strong {
-    font-size: 12px;
+    display: none;
   }
 }
 

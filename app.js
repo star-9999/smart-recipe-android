@@ -299,8 +299,7 @@ const App = {
       dishCount: this.state.dishCount,
       preference: this.state.preference,
       chatMessages: this.state.chatMessages,
-      page: this.state.page,
-      ingredientDraft: this.state.ingredientDraft
+      page: this.state.page
     }));
   },
 
@@ -606,11 +605,13 @@ const App = {
   },
 
   matchRecipes() {
-    return RECIPES.map(recipe => this.getRecipeInsights(recipe)).sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      if (b.healthScore !== a.healthScore) return b.healthScore - a.healthScore;
-      return a.timeMinutes - b.timeMinutes;
-    });
+    return RECIPES.map(recipe => this.getRecipeInsights(recipe))
+      .filter(recipe => recipe.score >= 0)
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        if (b.healthScore !== a.healthScore) return b.healthScore - a.healthScore;
+        return a.timeMinutes - b.timeMinutes;
+      });
   },
 
   adjustServings(recipe, servings) {
@@ -643,11 +644,35 @@ const App = {
 
     preferredLanes.forEach(lane => {
       if (picked.length >= this.state.dishCount) return;
-      const candidate = recipes.find(recipe => !usedIds.has(recipe.id) && this.getRecipeLane(recipe) === lane && recipe.score >= 42);
+      // 优先选库存充足的菜
+      let candidate = recipes.find(recipe =>
+        !usedIds.has(recipe.id) &&
+        this.getRecipeLane(recipe) === lane &&
+        recipe.statusKey === 'ready'
+      );
+      // 没有库存充足的，再选高分菜
+      if (!candidate) {
+        candidate = recipes.find(recipe =>
+          !usedIds.has(recipe.id) &&
+          this.getRecipeLane(recipe) === lane &&
+          recipe.score >= 42
+        );
+      }
       if (candidate) {
         picked.push(candidate);
         usedIds.add(candidate.id);
       }
+    });
+
+    // 补位时也优先库存充足
+    ['ready', 'nearly'].forEach(status => {
+      recipes.forEach(recipe => {
+        if (picked.length >= this.state.dishCount || usedIds.has(recipe.id)) return;
+        if (recipe.statusKey === status && recipe.score >= 35) {
+          picked.push(recipe);
+          usedIds.add(recipe.id);
+        }
+      });
     });
 
     recipes.forEach(recipe => {
@@ -764,13 +789,7 @@ const App = {
 
   renderGroupedInventory() {
     if (!this.state.inventoryExpanded) return '';
-    if (!this.state.fridge.length) {
-      return `
-        <div class="empty-state">
-          <p>先从上面的输入条开始，一项一项加食材，推荐会更准。</p>
-        </div>
-      `;
-    }
+    if (!this.state.fridge.length) return '';
     const groups = this.getFridgeByCategory();
     return `
       <div class="inventory-list">
@@ -970,9 +989,15 @@ const App = {
         }
       };
 
-      this.speechRecognition.onerror = () => {
+      this.speechRecognition.onerror = (event) => {
         this.state.isListening = false;
         this.render();
+        const msg = event.error === 'not-allowed'
+          ? '麦克风权限被拒绝，请在浏览器设置中允许后重试'
+          : event.error === 'no-speech'
+            ? '没有听到声音，请再试一次'
+            : '语音识别失败，请手动输入食材名称';
+        this.showToast(msg);
       };
 
       this.speechRecognition.onend = () => {
@@ -1115,6 +1140,12 @@ const App = {
   },
 
   startPhotoRecognition() {
+    if (!AI_API.key) {
+      if (!confirm('拍照识别需要配置 AI API（视觉模型），去设置页配置？')) return;
+      this.state.page = 'settings';
+      this.render();
+      return;
+    }
     const input = document.getElementById('photo-input');
     if (input) input.click();
   },
@@ -1266,7 +1297,7 @@ const App = {
         <div class="stat-tile">
           <span class="stat-label">库存食材</span>
           <strong>${this.state.fridge.length}</strong>
-          <span class="stat-note">${categoryCount} 个分类</span>
+          <span class="stat-note">${categoryCount} 类</span>
         </div>
         <div class="stat-tile">
           <span class="stat-label">可做菜谱</span>
@@ -1418,7 +1449,7 @@ const App = {
                 <span class="control-label">分类</span>
                 <div class="chip-row compact-chips">
                   ${['肉类', '蛋奶', '蔬菜', '豆制品', '主食', '调料', '饮品/其他', '其他'].map(category => `
-                    <button class="category-chip ${draft.category === category ? 'active' : ''}" onclick='App.setDraftCategory(${JSON.stringify(category)})'>
+                    <button class="draft-category-chip ${draft.category === category ? 'active' : ''}" onclick='App.setDraftCategory(${JSON.stringify(category)})'>
                       ${this.escapeHtml(category)}
                     </button>
                   `).join('')}
@@ -1598,7 +1629,7 @@ const App = {
         <header class="page-header-block">
           <div>
             <p class="eyebrow">Recommended Menus</p>
-            <h1>推荐结果不再只看有没有食材名，而是看量够不够、是否更健康。</h1>
+            <h1>按库存和健康度，排好今晚菜单。</h1>
           </div>
           <div class="header-actions">
             <button class="secondary-button" onclick="App.navigate('planner')">返回库存工作台</button>
@@ -1790,7 +1821,7 @@ const App = {
         <header class="page-header-block">
           <div>
             <p class="eyebrow">Chef Assistant</p>
-            <h1>让厨师助手围绕你的库存和偏好回答问题。</h1>
+            <h1>问厨师，围绕你的库存和偏好。</h1>
           </div>
         </header>
 
@@ -1834,7 +1865,7 @@ const App = {
         <header class="page-header-block">
           <div>
             <p class="eyebrow">Settings</p>
-            <h1>偏好和 AI 入口集中在这里。</h1>
+            <h1>偏好与 AI 设置</h1>
           </div>
         </header>
 
@@ -1869,20 +1900,6 @@ const App = {
             </div>
             <p class="support-copy">会清空库存、聊天记录和人数偏好。</p>
             <button class="secondary-button danger" onclick="App.clearData()">清空所有数据</button>
-          </section>
-
-          <section class="panel">
-            <div class="panel-head compact">
-              <div>
-                <p class="section-kicker">当前产品方向</p>
-                <h2>这次优化后的重点</h2>
-              </div>
-            </div>
-            <ul class="feature-list">
-              <li>库存录入支持克数、个数和单位编辑，不再默认只放 1 份。</li>
-              <li>推荐结果同时考虑食材命中、数量够不够、健康度和做饭偏好。</li>
-              <li>新增“做几道菜”规划，让菜单推荐更接近真实晚餐场景。</li>
-            </ul>
           </section>
         </div>
       </section>
@@ -2278,6 +2295,12 @@ const App = {
   },
 
   askAboutRecipe(name) {
+    if (!AI_API.key) {
+      if (!confirm('需要先配置 AI API 才能问厨师技巧，去设置页配置？')) return;
+      this.state.page = 'settings';
+      this.render();
+      return;
+    }
     this.state.page = 'chat';
     this.saveState();
     this.render();
@@ -2351,7 +2374,11 @@ const App = {
     localStorage.removeItem('glm_api_key');
     localStorage.removeItem('deepseek_api_key');
     localStorage.removeItem('ai_provider');
-    AI_API.provider = 'deepseek';
+    localStorage.removeItem('ai_model');
+    localStorage.removeItem('ai_vision_model');
+    AI_API.provider = 'glm';
+    AI_API.model = AI_API.providers.glm.defaultModel;
+    AI_API.visionModel = AI_API.providers.glm.defaultVisionModel;
     this.state = {
       ...this.state,
       fridge: [],

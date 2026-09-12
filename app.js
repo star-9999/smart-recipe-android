@@ -28,8 +28,20 @@ const AI_API = {
 
   get model() {
     const saved = localStorage.getItem('ai_model');
-    if (saved && this.config.models.includes(saved)) return saved;
+    if (saved) {
+      for (const p of Object.values(AI_PROVIDERS)) {
+        if (p.models.includes(saved)) return saved;
+      }
+    }
     return this.config.defaultModel;
+  },
+
+  get modelProvider() {
+    const m = this.model;
+    for (const [id, p] of Object.entries(AI_PROVIDERS)) {
+      if (p.models.includes(m)) return id;
+    }
+    return this.provider;
   },
 
   get key() {
@@ -56,15 +68,17 @@ const AI_API = {
   },
 
   async chat(messages) {
-    const key = this.key.trim();
+    const providerId = this.modelProvider;
+    const config = AI_PROVIDERS[providerId] || this.config;
+    const key = (localStorage.getItem(config.keyStorage) || '').trim();
     if (!key) {
-      throw new Error(`请先在设置中配置 ${this.config.label} API Key`);
+      throw new Error(`请先在"偏好与 API"中配置 ${config.label} 的 API Key`);
     }
     if (/[^\x00-\xFF]/.test(key)) {
-      throw new Error(`${this.config.label} API Key 包含异常字符（可能混入了中文、空格或换行），请重新从官网复制，只保留 sk- 开头的那串字符`);
+      throw new Error(`${config.label} API Key 包含异常字符（可能混入了中文、空格或换行），请重新从官网复制，只保留 sk- 开头的那串字符`);
     }
 
-    const res = await fetch(this.config.url, {
+    const res = await fetch(config.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -88,10 +102,10 @@ const AI_API = {
   },
 
   async chatVision(imageDataUrl, textPrompt) {
-    if (this.provider === 'deepseek' && this.model !== 'deepseek-flash') {
-      throw new Error('当前 DeepSeek 模型不支持视觉识别，请在 AI 状态栏切换到 deepseek-flash，或切换到智谱 GLM。');
+    if (this.modelProvider === 'deepseek' && this.model !== 'deepseek-flash') {
+      throw new Error('当前 DeepSeek 模型不支持视觉识别，请在"语音问答"页切换到 deepseek-flash，或切换到智谱 GLM。');
     }
-    const useDeepSeekVision = this.provider === 'deepseek' && this.model === 'deepseek-flash';
+    const useDeepSeekVision = this.modelProvider === 'deepseek' && this.model === 'deepseek-flash';
     const provider = useDeepSeekVision ? AI_PROVIDERS.deepseek : AI_PROVIDERS.glm;
     const model = useDeepSeekVision ? 'deepseek-flash' : VISION_MODEL;
     const key = (useDeepSeekVision ? this.key : this.glmKey).trim();
@@ -800,6 +814,10 @@ const App = {
 
   setAiModel(model) {
     AI_API.setModel(model);
+    const providerId = AI_API.modelProvider;
+    if (providerId && providerId !== AI_API.provider) {
+      AI_API.setProvider(providerId);
+    }
     this.render();
   },
 
@@ -1065,20 +1083,48 @@ const App = {
   },
 
   renderAiStatusBar() {
-    const hasKey = !!AI_API.key.trim();
+    const providerId = AI_API.modelProvider;
+    const config = AI_PROVIDERS[providerId] || AI_API.config;
+    const hasKey = !!(localStorage.getItem(config.keyStorage) || '').trim();
     return `
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;background:#fef5ee;border:1px solid #f0d9c4;border-radius:10px;margin-bottom:14px;font-size:13px;">
-        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${hasKey ? '#27ae60' : '#c0392b'};flex-shrink:0;"></span>
-        <span style="color:#7a5c3e;font-weight:600;">AI：</span>
-        <div class="chip-row" style="margin:0;">
-          ${Object.entries(AI_PROVIDERS).map(([id, p]) => `
-            <button class="pref-chip ${AI_API.provider === id ? 'active' : ''}" style="padding:3px 10px;font-size:12px;" onclick='App.setAiProvider(${JSON.stringify(id)})'>${this.escapeHtml(p.label)}</button>
-          `).join('')}
-        </div>
-        <select class="search-input" style="width:auto;padding:4px 8px;font-size:12px;min-width:130px;" onchange="App.setAiModel(this.value)">
-          ${AI_API.config.models.map(m => `<option value="${m}" ${AI_API.model === m ? 'selected' : ''}>${m}</option>`).join('')}
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 12px;background:#fafafa;border:1px solid #eee;border-radius:8px;margin-bottom:12px;font-size:12px;color:#666;">
+        <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${hasKey ? '#27ae60' : '#c0392b'};flex-shrink:0;"></span>
+        <span>AI 模型：${config.label} · ${AI_API.model}</span>
+        <a href="#" onclick="App.navigate('settings');return false;" style="color:${hasKey ? '#27ae60' : '#c0392b'};margin-left:auto;text-decoration:none;font-weight:500;">${hasKey ? '已配置' : '未配置，点此配置'}</a>
+      </div>
+    `;
+  },
+
+  renderChatModelSelector() {
+    const configured = Object.entries(AI_PROVIDERS).filter(([id, p]) => !!(localStorage.getItem(p.keyStorage) || '').trim());
+
+    if (configured.length) {
+      const currentProviderConfigured = configured.some(([id]) => id === AI_API.modelProvider);
+      if (!currentProviderConfigured) {
+        const [firstId, firstConfig] = configured[0];
+        AI_API.setProvider(firstId);
+        AI_API.setModel(firstConfig.defaultModel);
+      }
+    }
+
+    const options = configured.length
+      ? configured.flatMap(([id, p]) => p.models.map(m => ({ value: m, label: `${p.label} · ${m}` })))
+      : [{ value: '', label: '请先在"偏好与 API"中配置 API Key' }];
+
+    const currentModel = AI_API.model;
+    const selectedValue = options.some(o => o.value === currentModel) ? currentModel : (options[0]?.value || '');
+
+    return `
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;background:#fef5ee;border:1px solid #f0d9c4;border-radius:10px;margin-bottom:14px;font-size:13px;">
+        <span style="color:#7a5c3e;font-weight:600;">对话模型：</span>
+        <select class="search-input" style="width:auto;padding:6px 10px;font-size:13px;min-width:180px;" onchange="App.setAiModel(this.value)" ${configured.length ? '' : 'disabled'}>
+          ${options.map(o => `<option value="${o.value}" ${selectedValue === o.value ? 'selected' : ''}>${this.escapeHtml(o.label)}</option>`).join('')}
         </select>
-        <a href="#" onclick="App.navigate('settings');return false;" style="color:${hasKey ? '#27ae60' : '#c0392b'};font-size:12px;font-weight:500;text-decoration:none;">${hasKey ? 'Key 已配置' : 'Key 未配置，点此去设置'}</a>
+        <span style="font-size:12px;font-weight:500;">
+          ${configured.length
+            ? `<span style="color:#27ae60;">已配置：${configured.map(([_, p]) => p.label).join('、')}</span>`
+            : `<a href="#" onclick="App.navigate('settings');return false;" style="color:#c0392b;text-decoration:none;">未配置 API，点此去设置</a>`}
+        </span>
       </div>
     `;
   },
@@ -1577,7 +1623,7 @@ const App = {
           </div>
         </header>
 
-        ${this.renderAiStatusBar()}
+        ${this.renderChatModelSelector()}
 
         <div class="chat-layout panel">
           <div class="chat-hints">
@@ -1635,13 +1681,7 @@ const App = {
                 <button class="pref-chip ${AI_API.provider === id ? 'active' : ''}" onclick='App.setAiProvider(${JSON.stringify(id)})'>${this.escapeHtml(p.label)}</button>
               `).join('')}
             </div>
-            <div class="settings-row" style="margin-bottom:12px;">
-              <span class="control-label">对话模型</span>
-              <select class="search-input" onchange="App.setAiModel(this.value)">
-                ${AI_API.config.models.map(m => `<option value="${m}" ${AI_API.model === m ? 'selected' : ''}>${m}</option>`).join('')}
-              </select>
-            </div>
-            <p class="support-copy">从 <a href="${AI_API.config.site}" target="_blank" rel="noreferrer">${AI_API.config.site}</a> 获取 ${AI_API.config.label} API Key。拍照识别：选 DeepSeek-Flash 时用 DeepSeek 视觉，选智谱时用 GLM-4V。</p>
+            <p class="support-copy">从 <a href="${AI_API.config.site}" target="_blank" rel="noreferrer">${AI_API.config.site}</a> 获取 ${AI_API.config.label} API Key。配置成功后，可在"语音问答"页选择具体模型；拍照识别支持 DeepSeek-Flash 或智谱 GLM-4V。</p>
             <div class="settings-row">
               <input type="password" id="ai-key" class="search-input" placeholder="${AI_API.key ? '已配置（输入新值可覆盖）' : `输入你的 ${AI_API.config.label} API Key`}">
               <button class="primary-button" onclick="App.saveApiKey()">保存</button>
@@ -1973,7 +2013,7 @@ const App = {
       const result = await this.aiRecommend();
       resultDiv.innerHTML = `<div class="ai-content">${this.formatMarkdown(result)}</div>`;
     } catch (error) {
-      resultDiv.innerHTML = `<div class="support-copy error-text">AI 生成失败（${AI_API.config.label} · ${AI_API.model}）：${this.escapeHtml(error.message)}。请检查上方 AI 状态栏的 Key 配置，或切换模型后重试。</div>`;
+      resultDiv.innerHTML = `<div class="support-copy error-text">AI 生成失败（${AI_API.config.label} · ${AI_API.model}）：${this.escapeHtml(error.message)}。请检查当前 AI 模型对应的 API Key 是否配置成功，或在"语音问答"页切换模型后重试。</div>`;
     }
   },
 
@@ -2004,7 +2044,7 @@ const App = {
     } catch (error) {
       this.state.chatMessages.push({
         role: 'assistant',
-        content: `暂时无法调用 AI（${AI_API.config.label} · ${AI_API.model}）：${error.message}\n可在上方 AI 状态栏切换模型，或点"Key 未配置"去设置重新保存。`
+        content: `暂时无法调用 AI（${AI_API.config.label} · ${AI_API.model}）：${error.message}\n可在上方"对话模型"下拉框切换，或去"偏好与 API"重新配置 Key。`
       });
     }
 
@@ -2061,7 +2101,7 @@ const App = {
           Authorization: `Bearer ${key}`
         },
         body: JSON.stringify({
-          model: AI_API.model,
+          model: AI_API.config.defaultModel,
           messages: [{ role: 'user', content: 'ok' }],
           max_tokens: 1
         })
@@ -2073,11 +2113,17 @@ const App = {
       }
 
       AI_API.setKey(key);
-      this.showApiSaveStatus(`${AI_API.config.label} API Key 验证成功，已保存`, 'success');
+      this.showApiSaveStatus(`${AI_API.config.label} API 已配置成功`, 'success');
       this.render();
     } catch (error) {
-      this.showApiSaveStatus(`验证未通过，未保存：${error.message}`, 'error');
+      this.showApiSaveStatus(`验证未通过：${error.message}`, 'error');
       if (btn) { btn.textContent = originalText; btn.disabled = false; }
+      if (confirm('API Key 验证失败，是否重新配置？\n点"取消"则跳过，此服务商暂不配置。')) {
+        input?.focus();
+      } else {
+        if (input) input.value = '';
+        this.showApiSaveStatus('已跳过，此服务商 API 暂未配置', '');
+      }
     }
   },
 

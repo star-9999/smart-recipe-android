@@ -751,23 +751,10 @@ const App = {
             ${items.map(item => {
               const meta = this.getIngredientMeta(item.name, item.category);
               return `
-                <div class="inventory-row">
-                  <div class="inventory-main">
-                    <span class="inventory-icon">${this.escapeHtml(meta.emoji)}</span>
-                    <div>
-                      <strong>${this.escapeHtml(item.name)}</strong>
-                      <span>${this.escapeHtml(item.category)}</span>
-                    </div>
-                  </div>
-                  <div class="inventory-qty">
-                    <button onclick='App.nudgeIngredient(${JSON.stringify(item.name)}, -1)'>−</button>
-                    <strong>${this.escapeHtml(item.amount)}${this.escapeHtml(item.unit)}</strong>
-                    <button onclick='App.nudgeIngredient(${JSON.stringify(item.name)}, 1)'>+</button>
-                  </div>
-                  <div class="inventory-actions">
-                    <button class="text-button" onclick='App.editIngredient(${JSON.stringify(item.name)})'>编辑</button>
-                    <button class="text-button danger" onclick='App.removeFromFridge(${JSON.stringify(item.name)})'>删除</button>
-                  </div>
+                <div class="inventory-compact-row" onclick='App.editIngredient(${JSON.stringify(item.name)})'>
+                  <span class="inventory-icon">${this.escapeHtml(meta.emoji)}</span>
+                  <strong>${this.escapeHtml(item.name)}</strong>
+                  <span class="compact-amount">${this.escapeHtml(item.amount)}${this.escapeHtml(item.unit)}</span>
                 </div>
               `;
             }).join('')}
@@ -1354,7 +1341,7 @@ const App = {
               <div class="draft-meta">
                 <span class="control-label">分类</span>
                 <div class="chip-row compact-chips">
-                  ${['肉类', '蛋奶', '蔬菜', '主食', '调料', '饮品/其他', '其他'].map(category => `
+                  ${['肉类', '蛋奶', '蔬菜', '豆制品', '主食', '调料', '饮品/其他', '其他'].map(category => `
                     <button class="category-chip ${draft.category === category ? 'active' : ''}" onclick='App.setDraftCategory(${JSON.stringify(category)})'>
                       ${this.escapeHtml(category)}
                     </button>
@@ -1853,7 +1840,11 @@ const App = {
             <div class="modal-grid">
               <label>
                 数量
-                <input id="modal-amount" class="search-input" value="${this.escapeHtml(this.state.modal.amount)}" placeholder="例如：500">
+                <div class="modal-stepper">
+                  <button type="button" class="stepper-btn" onclick="App.modalNudge(-1)">减</button>
+                  <input id="modal-amount" class="search-input" value="${this.escapeHtml(this.state.modal.amount)}" placeholder="例如：500">
+                  <button type="button" class="stepper-btn" onclick="App.modalNudge(1)">加</button>
+                </div>
               </label>
 
               <label>
@@ -1867,7 +1858,7 @@ const App = {
             <label>
               分类
               <select id="modal-category" class="search-input">
-                ${['肉类', '蛋奶', '蔬菜', '主食', '调料', '饮品/其他', '其他'].map(category => `
+                ${['肉类', '蛋奶', '蔬菜', '豆制品', '主食', '调料', '饮品/其他', '其他'].map(category => `
                   <option value="${this.escapeHtml(category)}" ${category === this.state.modal.category ? 'selected' : ''}>${this.escapeHtml(category)}</option>
                 `).join('')}
               </select>
@@ -1997,6 +1988,17 @@ const App = {
     if (unit === 'g' || unit === 'ml') return 50;
     if (unit === 'L') return 0.1;
     return 1;
+  },
+
+  modalNudge(direction) {
+    const amountInput = document.getElementById('modal-amount');
+    const unitSelect = document.getElementById('modal-unit');
+    if (!amountInput) return;
+    const current = parseFloat(amountInput.value) || 0;
+    const unit = unitSelect?.value || '份';
+    const step = this.getInventoryNudge(unit);
+    const next = Math.max(0, +(current + direction * step).toFixed(2));
+    amountInput.value = next;
   },
 
   nudgeIngredient(name, direction) {

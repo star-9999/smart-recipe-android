@@ -2,7 +2,8 @@ const AI_PROVIDERS = {
   deepseek: {
     label: 'DeepSeek',
     url: 'https://api.deepseek.com/chat/completions',
-    models: ['deepseek-flash', 'deepseek-reasoner', 'deepseek-chat'],
+    textModels: ['deepseek-flash', 'deepseek-reasoner', 'deepseek-chat'],
+    visionModels: ['deepseek-flash'],
     defaultModel: 'deepseek-flash',
     site: 'https://platform.deepseek.com',
     keyStorage: 'deepseek_api_key'
@@ -10,7 +11,8 @@ const AI_PROVIDERS = {
   glm: {
     label: '智谱 GLM',
     url: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
-    models: ['glm-4-flash', 'glm-4', 'glm-4v', 'glm-4v-flash'],
+    textModels: ['glm-4-flash', 'glm-4'],
+    visionModels: ['glm-4v', 'glm-4v-flash'],
     defaultModel: 'glm-4-flash',
     site: 'https://open.bigmodel.cn',
     keyStorage: 'glm_api_key'
@@ -28,7 +30,7 @@ const AI_API = {
     const saved = localStorage.getItem('ai_model');
     if (saved) {
       for (const p of Object.values(AI_PROVIDERS)) {
-        if (p.models.includes(saved)) return saved;
+        if (p.textModels.includes(saved)) return saved;
       }
     }
     return this.config.defaultModel;
@@ -37,20 +39,20 @@ const AI_API = {
   get modelProvider() {
     const m = this.model;
     for (const [id, p] of Object.entries(AI_PROVIDERS)) {
-      if (p.models.includes(m)) return id;
+      if (p.textModels.includes(m)) return id;
     }
     return this.provider;
   },
 
   get visionModel() {
     const saved = localStorage.getItem('ai_vision_model');
-    const valid = ['glm-4v', 'glm-4v-flash', 'deepseek-flash'];
+    const valid = Object.values(AI_PROVIDERS).flatMap(p => p.visionModels);
     if (saved && valid.includes(saved)) return saved;
     return 'glm-4v';
   },
 
   setVisionModel(model) {
-    const valid = ['glm-4v', 'glm-4v-flash', 'deepseek-flash'];
+    const valid = Object.values(AI_PROVIDERS).flatMap(p => p.visionModels);
     if (valid.includes(model)) localStorage.setItem('ai_vision_model', model);
   },
 
@@ -69,8 +71,12 @@ const AI_API = {
   },
 
   setModel(model) {
-    if (!this.config.models.includes(model)) return;
-    localStorage.setItem('ai_model', model);
+    for (const p of Object.values(AI_PROVIDERS)) {
+      if (p.textModels.includes(model)) {
+        localStorage.setItem('ai_model', model);
+        return;
+      }
+    }
   },
 
   setKey(key) {
@@ -1119,7 +1125,7 @@ const App = {
     }
 
     const options = configured.length
-      ? configured.flatMap(([id, p]) => p.models.map(m => ({ value: m, label: `${p.label} · ${m}` })))
+      ? configured.flatMap(([id, p]) => p.textModels.map(m => ({ value: m, label: `${p.label} · ${m}` })))
       : [{ value: '', label: '请先在"偏好与 API"中配置 API Key' }];
 
     const currentModel = AI_API.model;

@@ -33,19 +33,23 @@ const AI_API = {
   },
 
   setKey(key) {
-    localStorage.setItem(this.config.keyStorage, key);
+    localStorage.setItem(this.config.keyStorage, String(key || '').trim());
   },
 
   async chat(messages) {
-    if (!this.key) {
+    const key = this.key.trim();
+    if (!key) {
       throw new Error(`请先在设置中配置 ${this.config.label} API Key`);
+    }
+    if (/[^\x00-\xFF]/.test(key)) {
+      throw new Error(`${this.config.label} API Key 包含异常字符（可能混入了中文、空格或换行），请重新从官网复制，只保留 sk- 开头的那串字符`);
     }
 
     const res = await fetch(this.config.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.key}`
+        Authorization: `Bearer ${key}`
       },
       body: JSON.stringify({
         model: this.config.model,

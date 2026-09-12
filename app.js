@@ -2,34 +2,53 @@ const AI_PROVIDERS = {
   deepseek: {
     label: 'DeepSeek',
     url: 'https://api.deepseek.com/chat/completions',
-    model: 'deepseek-chat',
+    models: ['deepseek-chat', 'deepseek-reasoner'],
+    defaultModel: 'deepseek-chat',
     site: 'https://platform.deepseek.com',
     keyStorage: 'deepseek_api_key'
   },
   glm: {
     label: '智谱 GLM',
     url: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
-    model: 'glm-4-flash',
+    models: ['glm-4-flash', 'glm-4', 'glm-4v', 'glm-4v-flash'],
+    defaultModel: 'glm-4-flash',
     site: 'https://open.bigmodel.cn',
     keyStorage: 'glm_api_key'
   }
 };
 
+const VISION_MODEL = 'glm-4v';
+
 const AI_API = {
-  provider: localStorage.getItem('ai_provider') || 'deepseek',
+  provider: localStorage.getItem('ai_provider') || 'glm',
 
   get config() {
-    return AI_PROVIDERS[this.provider] || AI_PROVIDERS.deepseek;
+    return AI_PROVIDERS[this.provider] || AI_PROVIDERS.glm;
+  },
+
+  get model() {
+    const saved = localStorage.getItem('ai_model');
+    if (saved && this.config.models.includes(saved)) return saved;
+    return this.config.defaultModel;
   },
 
   get key() {
     return localStorage.getItem(this.config.keyStorage) || '';
   },
 
+  get glmKey() {
+    return localStorage.getItem(AI_PROVIDERS.glm.keyStorage) || '';
+  },
+
   setProvider(provider) {
     if (!AI_PROVIDERS[provider]) return;
     this.provider = provider;
     localStorage.setItem('ai_provider', provider);
+  },
+
+  setModel(model) {
+    if (!this.config.models.includes(model)) return;
+    localStorage.setItem('ai_model', model);
   },
 
   setKey(key) {
@@ -52,7 +71,7 @@ const AI_API = {
         Authorization: `Bearer ${key}`
       },
       body: JSON.stringify({
-        model: this.config.model,
+        model: this.model,
         messages,
         temperature: 0.7,
         max_tokens: 2200
@@ -66,6 +85,43 @@ const AI_API = {
 
     const data = await res.json();
     return data.choices?.[0]?.message?.content || '暂时没有生成结果。';
+  },
+
+  async chatVision(imageDataUrl, textPrompt) {
+    const key = this.glmKey.trim();
+    if (!key) {
+      throw new Error('拍照识别需要智谱 GLM API Key，请先在设置中配置');
+    }
+    if (/[^\x00-\xFF]/.test(key)) {
+      throw new Error('智谱 GLM API Key 包含异常字符，请重新复制');
+    }
+
+    const res = await fetch(AI_PROVIDERS.glm.url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${key}`
+      },
+      body: JSON.stringify({
+        model: VISION_MODEL,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: textPrompt },
+            { type: 'image_url', image_url: { url: imageDataUrl } }
+          ]
+        }],
+        max_tokens: 1200
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `视觉识别失败（HTTP ${res.status}）`);
+    }
+
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content || '';
   }
 };
 
@@ -137,6 +193,7 @@ const App = {
       category: '其他'
     },
     isListening: false,
+    isBatchListening: false,
     speechSupported: false
   },
 
@@ -734,6 +791,183 @@ const App = {
     }
   },
 
+  setAiModel(model) {
+    AI_API.setModel(model);
+    this.render();
+  },
+
+  parseJsonArray(text) {
+    const cleaned = String(text || '').replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    try {
+      const parsed = JSON.parse(cleaned);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      const match = cleaned.match(/\[[\s\S]*\]/);
+      if (match) {
+        try { return JSON.parse(match[0]); } catch (e2) { return []; }
+      }
+      return [];
+    }
+  },
+
+  normalizeBatchItems(items) {
+    return (Array.isArray(items) ? items : []).map(item => {
+      const name = String(item?.name || item?.食材 || '').trim();
+      if (!name) return null;
+      const amount = String(item?.amount ?? item?.数量 ?? '1').trim() || '1';
+      const unit = String(item?.unit ?? item?.单位 ?? '份').trim() || '份';
+      const category = String(item?.category ?? item?.分类 ?? '').trim();
+      return {
+        name,
+        amount,
+        unit,
+        category: category || this.inferCategoryFromName(name) || '其他'
+      };
+    }).filter(Boolean);
+  },
+
+  openBatchPreview(items) {
+    this.state.modal = { mode: 'batch-preview', items };
+    this.render();
+  },
+
+  async startBatchVoice() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('当前浏览器不支持语音输入，请使用手机 Chrome。');
+      return;
+    }
+    if (this.state.isBatchListening) {
+      if (this.batchRecognition) this.batchRecognition.stop();
+      this.state.isBatchListening = false;
+      this.render();
+      return;
+    }
+    this.batchRecognition = new SpeechRecognition();
+    this.batchRecognition.lang = 'zh-CN';
+    this.batchRecognition.continuous = false;
+    this.batchRecognition.interimResults = false;
+    this.batchRecognition.onresult = (event) => {
+      const transcript = event.results?.[0]?.[0]?.transcript?.trim() || '';
+      if (transcript) this.parseIngredientsFromText(transcript);
+    };
+    this.batchRecognition.onerror = () => {
+      this.state.isBatchListening = false;
+      this.render();
+      alert('语音识别失败，请检查麦克风权限后重试。');
+    };
+    this.batchRecognition.onend = () => {
+      this.state.isBatchListening = false;
+      this.render();
+    };
+    try {
+      this.state.isBatchListening = true;
+      this.render();
+      this.batchRecognition.start();
+    } catch (e) {
+      this.state.isBatchListening = false;
+      this.render();
+    }
+  },
+
+  async parseIngredientsFromText(text) {
+    const prompt = `你是一个食材解析助手。用户用一句话描述家里的食材，请解析成 JSON 数组。
+每个元素包含：name(食材名，中文)、amount(数量，纯数字)、unit(单位，如 g、个、根、块、包)、category(分类，可选：肉类/蛋奶/蔬菜/主食/调料/其他)。
+只输出 JSON 数组，不要输出任何解释、markdown 或代码块标记。
+用户说：${text}`;
+    try {
+      const reply = await AI_API.chat([{ role: 'user', content: prompt }]);
+      const items = this.normalizeBatchItems(this.parseJsonArray(reply));
+      if (!items.length) {
+        alert('没能从这句话里识别出食材，请说得更具体，例如"三个鸡蛋、两个西红柿、一块五花肉"。');
+        return;
+      }
+      this.openBatchPreview(items);
+    } catch (error) {
+      alert(`解析失败：${error.message}`);
+    }
+  },
+
+  startPhotoRecognition() {
+    const input = document.getElementById('photo-input');
+    if (input) input.click();
+  },
+
+  resizeImage(file, maxWidth = 1024, quality = 0.7) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const scale = Math.min(1, maxWidth / img.width);
+          const w = Math.round(img.width * scale);
+          const h = Math.round(img.height * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  },
+
+  async handlePhotoFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = '';
+    try {
+      const dataUrl = await this.resizeImage(file);
+      const prompt = `识别图片中的所有食材。输出 JSON 数组，每个元素包含：name(食材名，中文)、amount(估计数量，纯数字)、unit(单位)、category(分类：肉类/蛋奶/蔬菜/主食/调料/其他)。
+无法判断数量时 amount 填 1、unit 填"份"。只输出 JSON 数组，不要解释。`;
+      const reply = await AI_API.chatVision(dataUrl, prompt);
+      const items = this.normalizeBatchItems(this.parseJsonArray(reply));
+      if (!items.length) {
+        alert('没能从照片里识别出食材，请换个角度或光线再试一次。');
+        return;
+      }
+      this.openBatchPreview(items);
+    } catch (error) {
+      alert(`拍照识别失败：${error.message}`);
+    }
+  },
+
+  confirmBatchAdd() {
+    const items = this.state.modal?.items || [];
+    items.forEach(item => {
+      const existingIndex = this.state.fridge.findIndex(f => f.name === item.name);
+      const normalized = this.normalizeFridgeItem({
+        id: existingIndex >= 0 ? this.state.fridge[existingIndex].id : `ingredient-${Date.now()}-${item.name}`,
+        name: item.name,
+        amount: item.amount,
+        unit: item.unit,
+        category: item.category
+      }, existingIndex >= 0 ? existingIndex : this.state.fridge.length);
+      if (existingIndex >= 0) {
+        this.state.fridge.splice(existingIndex, 1, normalized);
+      } else {
+        this.state.fridge.unshift(normalized);
+      }
+    });
+    this.state.modal = null;
+    this.saveState();
+    this.render();
+  },
+
+  removeBatchItem(index) {
+    if (!this.state.modal?.items) return;
+    this.state.modal.items.splice(index, 1);
+    if (!this.state.modal.items.length) {
+      this.state.modal = null;
+    }
+    this.render();
+  },
+
   render() {
     const root = document.getElementById('app');
     root.innerHTML = `
@@ -905,6 +1139,12 @@ const App = {
                 <button class="secondary-button" onclick="App.resetIngredientDraft(); App.saveState(); App.render();">清空</button>
                 <button class="primary-button add-button" onclick="App.addIngredientFromDraft()">添加这一项</button>
               </div>
+
+              <div class="composer-actions" style="margin-top:8px;">
+                <button class="secondary-button" onclick="App.startBatchVoice()">${this.state.isBatchListening ? '停止录音' : '语音批量添加'}</button>
+                <button class="secondary-button" onclick="App.startPhotoRecognition()">拍照识别添加</button>
+              </div>
+              <input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none" onchange="App.handlePhotoFile(event)">
 
               <p class="support-copy">${this.state.speechSupported ? '支持语音输入食材名称。识别后仍可手动改字和单位。' : '当前浏览器未检测到语音识别，仍可手动输入食材名称。'}</p>
             </div>
@@ -1362,7 +1602,13 @@ const App = {
                 <button class="pref-chip ${AI_API.provider === id ? 'active' : ''}" onclick='App.setAiProvider(${JSON.stringify(id)})'>${this.escapeHtml(p.label)}</button>
               `).join('')}
             </div>
-            <p class="support-copy">从 <a href="${AI_API.config.site}" target="_blank" rel="noreferrer">${AI_API.config.site}</a> 获取 ${AI_API.config.label} API Key。</p>
+            <div class="settings-row" style="margin-bottom:12px;">
+              <span class="control-label">对话模型</span>
+              <select class="search-input" onchange="App.setAiModel(this.value)">
+                ${AI_API.config.models.map(m => `<option value="${m}" ${AI_API.model === m ? 'selected' : ''}>${m}</option>`).join('')}
+              </select>
+            </div>
+            <p class="support-copy">从 <a href="${AI_API.config.site}" target="_blank" rel="noreferrer">${AI_API.config.site}</a> 获取 ${AI_API.config.label} API Key。拍照识别固定使用智谱 GLM-4V 视觉模型。</p>
             <div class="settings-row">
               <input type="password" id="ai-key" class="search-input" placeholder="${AI_API.key ? '已配置（输入新值可覆盖）' : `输入你的 ${AI_API.config.label} API Key`}">
               <button class="primary-button" onclick="App.saveApiKey()">保存</button>
@@ -1401,6 +1647,9 @@ const App = {
 
   renderIngredientModal() {
     if (!this.state.modal) return '';
+    if (this.state.modal.mode === 'batch-preview') {
+      return this.renderBatchPreviewModal();
+    }
     const unitOptions = Array.from(new Set([...COMMON_UNITS, this.state.modal.unit].filter(Boolean)));
 
     return `
@@ -1450,6 +1699,46 @@ const App = {
               : '<span></span>'
             }
             <button class="primary-button" onclick="App.saveIngredientFromModal()">保存到库存</button>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  renderBatchPreviewModal() {
+    const items = this.state.modal?.items || [];
+    return `
+      <div class="modal-overlay" onclick="App.dismissModal(event)">
+        <div class="modal-sheet">
+          <div class="panel-head">
+            <div>
+              <p class="section-kicker">识别结果</p>
+              <h2>确认要添加的食材（${items.length} 项）</h2>
+            </div>
+            <button class="text-button" onclick="App.closeModal()">关闭</button>
+          </div>
+          <div class="inventory-list" style="max-height:50vh;overflow-y:auto;">
+            ${items.map((item, i) => `
+              <div class="inventory-row">
+                <div class="inventory-main">
+                  <span class="inventory-icon">${this.escapeHtml(this.getIngredientMeta(item.name, item.category).emoji)}</span>
+                  <div>
+                    <strong>${this.escapeHtml(item.name)}</strong>
+                    <span>${this.escapeHtml(item.category)}</span>
+                  </div>
+                </div>
+                <div class="inventory-qty">
+                  <strong>${this.escapeHtml(item.amount)}${this.escapeHtml(item.unit)}</strong>
+                </div>
+                <div class="inventory-actions">
+                  <button class="text-button danger" onclick='App.removeBatchItem(${i})'>移除</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+          <div class="modal-actions">
+            <button class="secondary-button" onclick="App.closeModal()">取消</button>
+            <button class="primary-button" onclick="App.confirmBatchAdd()">全部加入库存</button>
           </div>
         </div>
       </div>
@@ -1739,7 +2028,7 @@ const App = {
           Authorization: `Bearer ${key}`
         },
         body: JSON.stringify({
-          model: AI_API.config.model,
+          model: AI_API.model,
           messages: [{ role: 'user', content: 'ok' }],
           max_tokens: 1
         })
@@ -1786,6 +2075,7 @@ const App = {
         category: '其他'
       },
       isListening: false,
+      isBatchListening: false,
       speechSupported: this.state.speechSupported
     };
     this.render();

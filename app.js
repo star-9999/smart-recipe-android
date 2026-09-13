@@ -231,7 +231,12 @@ const App = {
     },
     isListening: false,
     isBatchListening: false,
-    speechSupported: false
+    speechSupported: false,
+    duplicateDraft: null,
+    timer: null,
+    completedSteps: {},
+    isChatLoading: false,
+    isChatListening: false
   },
 
   init() {
@@ -279,6 +284,7 @@ const App = {
       this.state.dishCount = this.clampNumber(parsed.dishCount, 1, 5, 3);
       this.state.preference = PREFERENCE_PRESETS[parsed.preference] ? parsed.preference : 'light';
       this.state.chatMessages = Array.isArray(parsed.chatMessages) ? parsed.chatMessages : [];
+      this.state.completedSteps = (parsed.completedSteps && typeof parsed.completedSteps === 'object') ? parsed.completedSteps : {};
       this.state.page = parsed.page === 'fridge' ? 'planner' : parsed.page || 'planner';
       this.state.ingredientDraft = {
         ...this.state.ingredientDraft,
@@ -299,6 +305,7 @@ const App = {
       dishCount: this.state.dishCount,
       preference: this.state.preference,
       chatMessages: this.state.chatMessages,
+      completedSteps: this.state.completedSteps,
       page: this.state.page
     }));
   },
@@ -912,18 +919,36 @@ const App = {
     };
   },
 
-  showToast(message) {
+  showToast(message, action = null) {
     let toast = document.getElementById('app-toast');
     if (!toast) {
       toast = document.createElement('div');
       toast.id = 'app-toast';
-      toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.82);color:#fff;padding:10px 20px;border-radius:20px;font-size:14px;z-index:9999;opacity:0;transition:opacity 0.25s;pointer-events:none;max-width:80%;text-align:center;line-height:1.4;';
+      toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(31,24,19,0.92);backdrop-filter:blur(10px);color:#fff;padding:10px 20px;border-radius:24px;font-size:13px;z-index:9999;opacity:0;transition:opacity 0.25s,transform 0.25s;max-width:86%;display:flex;align-items:center;gap:12px;box-shadow:0 12px 30px rgba(0,0,0,0.3);line-height:1.4;';
       document.body.appendChild(toast);
     }
-    toast.textContent = message;
+    toast.innerHTML = '';
+    const msgSpan = document.createElement('span');
+    msgSpan.textContent = message;
+    toast.appendChild(msgSpan);
+
+    if (action && typeof action.onClick === 'function') {
+      toast.style.pointerEvents = 'auto';
+      const actBtn = document.createElement('button');
+      actBtn.textContent = action.text || '撤销';
+      actBtn.style.cssText = 'color:#ff9f68;font-weight:700;border:none;background:none;cursor:pointer;padding:2px 6px;text-decoration:underline;font-size:13px;flex-shrink:0;';
+      actBtn.onclick = (e) => {
+        e.stopPropagation();
+        action.onClick();
+        toast.style.opacity = '0';
+      };
+      toast.appendChild(actBtn);
+    } else {
+      toast.style.pointerEvents = 'none';
+    }
     toast.style.opacity = '1';
     clearTimeout(this._toastTimer);
-    this._toastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 2200);
+    this._toastTimer = setTimeout(() => { toast.style.opacity = '0'; }, action ? 4500 : 2500);
   },
 
   addIngredientFromDraft() {
@@ -933,8 +958,29 @@ const App = {
     const category = this.state.ingredientDraft.category || this.inferCategoryFromName(name) || '其他';
 
     if (!name) {
+      this.showToast('请输入食材名称');
       const input = document.getElementById('ingredient-name-input');
-      if (input) input.focus();
+      if (input) {
+        input.classList.add('input-error');
+        input.focus();
+        setTimeout(() => input.classList.remove('input-error'), 1500);
+      }
+      return;
+    }
+
+    const parsedAmount = parseFloat(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      this.showToast('请输入大于 0 的有效数量');
+      const amountInput = document.getElementById('ingredient-amount-input');
+      if (amountInput) {
+        amountInput.classList.add('input-error');
+        amountInput.focus();
+        setTimeout(() => amountInput.classList.remove('input-error'), 1500);
+      }
+      return;
+    }
+    if (parsedAmount > 99999) {
+      this.showToast('食材数量过大，请确认分量');
       return;
     }
 
@@ -942,35 +988,55 @@ const App = {
 
     if (existingIndex >= 0) {
       const existing = this.state.fridge[existingIndex];
-      const accumulated = String(Math.round((parseFloat(existing.amount) + parseFloat(amount)) * 100) / 100);
-      const ok = confirm(`库存中已有「${name} ${existing.amount}${existing.unit}」。\n\n点"确定"：覆盖为 ${amount}${unit}\n点"取消"：累加为 ${accumulated}${existing.unit}`);
-      if (ok) {
-        const nextItem = this.normalizeFridgeItem({
-          id: existing.id,
-          name,
-          amount,
-          unit,
-          category
-        }, existingIndex);
-        this.state.fridge.splice(existingIndex, 1, nextItem);
-        this.showToast(`已更新：${name} ${amount}${unit}`);
-      } else {
-        this.state.fridge[existingIndex].amount = accumulated;
-        this.showToast(`已累加：${name} ${accumulated}${existing.unit}`);
-      }
-    } else {
-      const nextItem = this.normalizeFridgeItem({
-        id: `ingredient-${Date.now()}`,
+      const accumulated = String(Math.round((parseFloat(existing.amount) + parsedAmount) * 100) / 100);
+      this.state.duplicateDraft = {
+        existingIndex,
+        existing,
         name,
-        amount,
+        amount: String(parsedAmount),
         unit,
-        category
-      }, this.state.fridge.length);
-      this.state.fridge.unshift(nextItem);
-      this.showToast(`已添加：${name} ${amount}${unit}`);
+        category,
+        accumulated
+      };
+      this.render();
+      return;
     }
 
+    const nextItem = this.normalizeFridgeItem({
+      id: `ingredient-${Date.now()}`,
+      name,
+      amount: String(parsedAmount),
+      unit,
+      category
+    }, this.state.fridge.length);
+    this.state.fridge.unshift(nextItem);
+    this.showToast(`已添加：${name} ${parsedAmount}${unit}`);
+
     this.resetIngredientDraft();
+    this.saveState();
+    this.render();
+  },
+
+  resolveDuplicate(action) {
+    if (!this.state.duplicateDraft) return;
+    const d = this.state.duplicateDraft;
+    if (action === 'accumulate') {
+      this.state.fridge[d.existingIndex].amount = d.accumulated;
+      this.showToast(`已累加：${d.name} ${d.accumulated}${d.existing.unit}`);
+      this.resetIngredientDraft();
+    } else if (action === 'overwrite') {
+      const nextItem = this.normalizeFridgeItem({
+        id: d.existing.id,
+        name: d.name,
+        amount: d.amount,
+        unit: d.unit,
+        category: d.category
+      }, d.existingIndex);
+      this.state.fridge.splice(d.existingIndex, 1, nextItem);
+      this.showToast(`已覆盖：${d.name} ${d.amount}${d.unit}`);
+      this.resetIngredientDraft();
+    }
+    this.state.duplicateDraft = null;
     this.saveState();
     this.render();
   },
@@ -1240,6 +1306,7 @@ const App = {
         ${this.renderPage()}
       </main>
       ${this.renderIngredientModal()}
+      ${this.renderFloatingTimer()}
     `;
     this.afterRender();
   },
@@ -1364,15 +1431,7 @@ const App = {
             ? `<span style="color:#27ae60;">已配置：${configured.map(([_, p]) => p.label).join('、')}</span>`
             : `<a href="#" onclick="App.navigate('settings');return false;" style="color:#c0392b;text-decoration:none;">未配置 API，点此去设置</a>`}
         </span>
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;width:100%;margin-top:6px;padding-top:8px;border-top:1px dashed #e8d5c0;">
-          <span style="color:#7a5c3e;font-weight:600;">视觉模型：</span>
-          <select class="search-input" style="width:auto;padding:6px 10px;font-size:13px;min-width:180px;" onchange="App.setVisionModel(this.value)">
-            <option value="glm-4v" ${AI_API.visionModel === 'glm-4v' ? 'selected' : ''}>智谱 GLM · glm-4v</option>
-            <option value="glm-4v-flash" ${AI_API.visionModel === 'glm-4v-flash' ? 'selected' : ''}>智谱 GLM · glm-4v-flash</option>
-            ${deepseekConfigured ? `<option value="deepseek-flash" ${AI_API.visionModel === 'deepseek-flash' ? 'selected' : ''}>DeepSeek · deepseek-flash</option>` : ''}
-          </select>
-          <span style="color:#999;font-size:12px;">用于拍照识别食材，默认 glm-4v</span>
-        </div>
+
       </div>
     `;
   },
@@ -1386,7 +1445,7 @@ const App = {
       <section class="page planner-page">
         <header class="planner-hero">
           <div class="hero-copy">
-            <p class="eyebrow">Mobile Cooking Planner</p>
+            <p class="eyebrow">食材管家</p>
             <h1>先录食材，再生成今晚菜单。</h1>
             <p class="hero-subtitle">点下面的食材标签直接加入库存，也可以手动输入或用语音录入。</p>
           </div>
@@ -1394,7 +1453,26 @@ const App = {
 
         ${this.renderAiStatusBar()}
 
+        ${this.state.fridge.length === 0 ? `
+          <div class="empty-onboarding-card">
+            <div class="onboarding-icon">🥗</div>
+            <div class="onboarding-content">
+              <h3>冰箱目前还是空的</h3>
+              <p>录入食材后，系统将根据现有库存推荐最佳菜谱。也可以先一键导入常用家常食材：</p>
+              <div class="onboarding-actions">
+                <button class="primary-button" onclick="App.loadStarterPack()">一键导入家常食材包 (8种)</button>
+                <button class="secondary-button" onclick="App.navigate('planner')">手动去录入</button>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
         <div class="mobile-stack">
+          ${this.renderFridgeOverview()}
+          <section class="panel inventory-panel">
+            ${this.renderGroupedInventory()}
+          </section>
+
           <section class="panel browser-panel">
             <div class="panel-head mobile-tight">
               <div>
@@ -1403,7 +1481,7 @@ const App = {
               </div>
             </div>
 
-            <div class="search-row">
+            <div class="search-row" style="position:relative;">
               <input
                 type="text"
                 class="search-input"
@@ -1411,6 +1489,7 @@ const App = {
                 value="${this.escapeHtml(this.state.ingredientSearch)}"
                 oninput="App.setIngredientSearch(this.value)"
               >
+              ${this.state.ingredientSearch ? `<button class="search-clear-btn" onclick="App.clearIngredientSearch()" title="清空搜索">✕</button>` : ''}
             </div>
 
             <div class="chip-row category-row">
@@ -1432,13 +1511,14 @@ const App = {
             ` : ''}
 
             <div class="suggestion-grid">
-              ${this.renderSuggestionGroups(suggestionRows)}
+              ${suggestionRows.length
+                ? this.renderSuggestionGroups(suggestionRows)
+                : `<div class="empty-suggestion-fallback" style="grid-column:1/-1;text-align:center;padding:24px 12px;background:#fdfcf9;border:1px dashed #e8d5c0;border-radius:12px;">
+                     <p style="color:#7a5c3e;margin-bottom:8px;">常用捷径中未找到「${this.escapeHtml(this.state.ingredientSearch)}」</p>
+                     <button class="secondary-button" onclick='App.quickAddDraft(${JSON.stringify(this.state.ingredientSearch)})' style="font-size:13px;padding:6px 14px;">➕ 将「${this.escapeHtml(this.state.ingredientSearch)}」填入下方录入框</button>
+                   </div>`
+              }
             </div>
-          </section>
-
-          ${this.renderFridgeOverview()}
-          <section class="panel inventory-panel">
-            ${this.renderGroupedInventory()}
           </section>
 
           <section class="panel quick-input-panel">
@@ -1559,7 +1639,7 @@ const App = {
       <section class="page recipes-page">
         <header class="page-header-block">
           <div>
-            <p class="eyebrow">Recommended Menus</p>
+            <p class="eyebrow">今日菜单</p>
             <h1>按库存和健康度，排好今晚菜单。</h1>
           </div>
           <div class="header-actions">
@@ -1755,12 +1835,27 @@ const App = {
             </div>
           </div>
           <div class="step-list">
-            ${detail.steps.map((step, index) => `
-              <div class="step-row">
-                <span>${index + 1}</span>
-                <p>${this.escapeHtml(step)}</p>
-              </div>
-            `).join('')}
+            ${detail.steps.map((step, index) => {
+              const isCompleted = (this.state.completedSteps?.[recipe.id] || []).includes(index);
+              const timeMatch = step.match(/(\d+(?:\.\d+)?)(?:[-~到](\d+(?:\.\d+)?))?\s*(分钟|分|秒)/);
+              let timerBtn = '';
+              if (timeMatch) {
+                const num = parseFloat(timeMatch[2] || timeMatch[1]);
+                const unit = timeMatch[3];
+                const minutes = unit === '秒' ? num / 60 : num;
+                const label = `${detail.name} 步骤${index + 1}`;
+                timerBtn = `<button class="step-timer-btn" onclick="event.stopPropagation(); App.startTimer(${minutes}, '${this.escapeHtml(label)}')">⏱️ ${timeMatch[0]}计时</button>`;
+              }
+              return `
+                <div class="step-row ${isCompleted ? 'completed' : ''}" onclick="App.toggleStep('${recipe.id}', ${index})">
+                  <span class="step-num-badge">${isCompleted ? '✓' : index + 1}</span>
+                  <div class="step-content">
+                    <p>${this.escapeHtml(step)}</p>
+                    ${timerBtn}
+                  </div>
+                </div>
+              `;
+            }).join('')}
           </div>
         </section>
       </section>
@@ -1787,7 +1882,7 @@ const App = {
       <section class="page chat-page">
         <header class="page-header-block">
           <div>
-            <p class="eyebrow">Chef Assistant</p>
+            <p class="eyebrow">问厨小助理</p>
             <h1>问厨师，围绕你的库存和偏好。</h1>
           </div>
         </header>
@@ -1805,7 +1900,15 @@ const App = {
             ${this.state.chatMessages.length
               ? this.state.chatMessages.map(message => `
                 <div class="chat-msg ${message.role}">
-                  <strong>${message.role === 'user' ? '你' : '厨师助手'}</strong>
+                  <div class="chat-msg-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                    <strong>${message.role === 'user' ? '你' : '厨师助手'}</strong>
+                    ${message.role === 'assistant' ? `
+                      <div class="chat-msg-actions" style="display:flex;gap:6px;">
+                        <button class="mini-icon-btn" onclick='App.copyText(this, ${JSON.stringify(message.content)})' title="复制回答">📋</button>
+                        <button class="mini-icon-btn" onclick='App.speakText(${JSON.stringify(message.content)})' title="朗读回答">🔊</button>
+                      </div>
+                    ` : ''}
+                  </div>
                   <div class="chat-bubble">${this.formatMarkdown(message.content)}</div>
                 </div>
               `).join('')
@@ -1815,11 +1918,24 @@ const App = {
                 </div>
               `
             }
+            ${this.state.isChatLoading ? `
+              <div class="chat-msg assistant">
+                <strong>厨师助手</strong>
+                <div class="chat-bubble thinking">
+                  <span class="dot"></span><span class="dot"></span><span class="dot"></span> 正在思考中...
+                </div>
+              </div>
+            ` : ''}
           </div>
 
           <div class="chat-input-row">
+            ${this.state.speechSupported ? `
+              <button class="voice-button ${this.state.isChatListening ? 'active' : ''}" onclick="App.toggleChatVoice()" title="语音输入" style="min-width:44px;padding:0 10px;">
+                ${this.state.isChatListening ? '⏹' : '🎤'}
+              </button>
+            ` : ''}
             <input type="text" id="chat-input" class="search-input" placeholder="输入你的烹饪问题..." onkeydown="if(event.key==='Enter') App.sendChat()">
-            <button class="primary-button" onclick="App.sendChat()">发送</button>
+            <button class="primary-button" onclick="App.sendChat()" ${this.state.isChatLoading ? 'disabled' : ''}>${this.state.isChatLoading ? '请稍候' : '发送'}</button>
           </div>
         </div>
       </section>
@@ -1831,7 +1947,7 @@ const App = {
       <section class="page settings-page">
         <header class="page-header-block">
           <div>
-            <p class="eyebrow">Settings</p>
+            <p class="eyebrow">偏好与设置</p>
             <h1>偏好与 AI 设置</h1>
           </div>
         </header>
@@ -1855,7 +1971,17 @@ const App = {
               <input type="password" id="ai-key" class="search-input" placeholder="${AI_API.key ? '已配置（输入新值可覆盖）' : `输入你的 ${AI_API.config.label} API Key`}">
               <button class="primary-button" onclick="App.saveApiKey()">保存</button>
             </div>
-            <p class="support-copy" id="api-save-status">${AI_API.key ? `已配置 ${AI_API.config.label}，可以用 AI 生成今日菜单。` : `未配置 ${AI_API.config.label}，当前只使用本地规则推荐。`}</p>
+            <p class="support-copy" id="api-save-status">${AI_API.key ? `已配置 ${AI_API.config.label}，可以用 AI 生成今日菜单与拍照识别。` : `未配置 ${AI_API.config.label}，当前只使用本地规则推荐。`}</p>
+
+            <div style="margin-top:16px;padding-top:14px;border-top:1px solid #f0e6dc;">
+              <p class="section-kicker" style="margin-bottom:4px;">拍照识别视觉模型</p>
+              <p class="support-copy" style="margin-bottom:8px;">在批量录入中拍照识别食材包装或小票时使用的视觉模型：</p>
+              <select class="search-input" style="max-width:280px;font-size:14px;" onchange="App.setVisionModel(this.value)">
+                <option value="glm-4v" ${AI_API.visionModel === 'glm-4v' ? 'selected' : ''}>智谱 GLM · glm-4v (高精度)</option>
+                <option value="glm-4v-flash" ${AI_API.visionModel === 'glm-4v-flash' ? 'selected' : ''}>智谱 GLM · glm-4v-flash (快速经济)</option>
+                ${Object.entries(AI_PROVIDERS).filter(([id, p]) => !!(localStorage.getItem(p.keyStorage) || '').trim()).some(([id]) => id === 'deepseek') ? `<option value="deepseek-flash" ${AI_API.visionModel === 'deepseek-flash' ? 'selected' : ''}>DeepSeek · deepseek-flash</option>` : ''}
+              </select>
+            </div>
           </section>
 
           <section class="panel">
@@ -1873,7 +1999,284 @@ const App = {
     `;
   },
 
+
+  playChime() {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const now = ctx.currentTime;
+      [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + i * 0.15);
+        gain.gain.setValueAtTime(0.3, now + i * 0.15);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.15 + 0.4);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + i * 0.15);
+        osc.stop(now + i * 0.15 + 0.45);
+      });
+    } catch (e) {
+      console.warn('AudioContext error:', e);
+    }
+  },
+
+  startTimer(minutes, label = '烹饪计时') {
+    if (this.state.timer?.intervalId) {
+      clearInterval(this.state.timer.intervalId);
+    }
+    const totalSeconds = Math.max(1, Math.round(minutes * 60));
+    this.state.timer = {
+      label,
+      totalSeconds,
+      remainingSeconds: totalSeconds,
+      isPaused: false,
+      intervalId: null
+    };
+    this.state.timer.intervalId = setInterval(() => {
+      if (!this.state.timer || this.state.timer.isPaused) return;
+      this.state.timer.remainingSeconds--;
+      if (this.state.timer.remainingSeconds <= 0) {
+        clearInterval(this.state.timer.intervalId);
+        this.state.timer.remainingSeconds = 0;
+        this.playChime();
+        this.showToast(`⏰ 【${this.state.timer.label}】时间到啦！`);
+      }
+      this.updateFloatingTimer();
+    }, 1000);
+    this.render();
+    this.showToast(`⏱️ 已启动 ${minutes} 分钟计时：${label}`);
+  },
+
+  toggleTimerPause() {
+    if (!this.state.timer) return;
+    this.state.timer.isPaused = !this.state.timer.isPaused;
+    this.render();
+  },
+
+  cancelTimer() {
+    if (this.state.timer?.intervalId) {
+      clearInterval(this.state.timer.intervalId);
+    }
+    this.state.timer = null;
+    this.render();
+    this.showToast('计时已取消');
+  },
+
+  updateFloatingTimer() {
+    const el = document.getElementById('floating-timer-text');
+    if (el && this.state.timer) {
+      const m = Math.floor(this.state.timer.remainingSeconds / 60);
+      const s = this.state.timer.remainingSeconds % 60;
+      el.textContent = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+  },
+
+  renderFloatingTimer() {
+    if (!this.state.timer) return '';
+    const m = Math.floor(this.state.timer.remainingSeconds / 60);
+    const s = this.state.timer.remainingSeconds % 60;
+    const timeStr = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return `
+      <div class="floating-timer" onclick="event.stopPropagation()">
+        <span class="timer-icon">⏱️</span>
+        <div class="timer-info">
+          <span class="timer-label">${this.escapeHtml(this.state.timer.label)}</span>
+          <span id="floating-timer-text" class="timer-countdown">${timeStr}</span>
+        </div>
+        <button class="mini-icon-btn" onclick="App.toggleTimerPause()" title="${this.state.timer.isPaused ? '继续' : '暂停'}">
+          ${this.state.timer.isPaused ? '▶' : '⏸'}
+        </button>
+        <button class="mini-icon-btn" onclick="App.cancelTimer()" title="关闭">✕</button>
+      </div>
+    `;
+  },
+
+  toggleStep(recipeId, stepIndex) {
+    if (!this.state.completedSteps) this.state.completedSteps = {};
+    if (!this.state.completedSteps[recipeId]) this.state.completedSteps[recipeId] = [];
+    const list = this.state.completedSteps[recipeId];
+    const idx = list.indexOf(stepIndex);
+    if (idx >= 0) {
+      list.splice(idx, 1);
+    } else {
+      list.push(stepIndex);
+    }
+    this.saveState();
+    this.render();
+  },
+
+  loadStarterPack() {
+    const starterItems = [
+      { name: '鸡蛋', amount: '6', unit: '个', category: '蛋奶' },
+      { name: '西红柿', amount: '2', unit: '个', category: '蔬菜' },
+      { name: '西兰花', amount: '1', unit: '个', category: '蔬菜' },
+      { name: '鸡胸肉', amount: '300', unit: 'g', category: '肉类' },
+      { name: '大米', amount: '500', unit: 'g', category: '主食' },
+      { name: '蒜', amount: '1', unit: '头', category: '调料' },
+      { name: '生抽', amount: '1', unit: '瓶', category: '调料' },
+      { name: '盐', amount: '1', unit: '包', category: '调料' }
+    ];
+    this.state.fridge = starterItems.map((item, index) => this.normalizeFridgeItem(item, index));
+    this.saveState();
+    this.render();
+    this.showToast('🎉 已成功导入 8 种家常核心食材！快看看推荐菜谱吧');
+  },
+
+  clearIngredientSearch() {
+    this.state.ingredientSearch = '';
+    this.render();
+  },
+
+  quickAddDraft(name) {
+    if (!name) return;
+    const trimmed = name.trim();
+    const category = this.inferCategoryFromName(trimmed);
+    const preset = this.getDefaultInventoryPreset(trimmed, category);
+    this.state.ingredientDraft = {
+      name: trimmed,
+      amount: preset.amount || '300',
+      unit: preset.unit || 'g',
+      category: category || '其他'
+    };
+    this.state.ingredientSearch = '';
+    this.render();
+    setTimeout(() => {
+      const el = document.getElementById('ingredient-name-input');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
+  },
+
+  copyText(btn, text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        this.showToast('已复制到剪贴板');
+      }).catch(() => {
+        this.fallbackCopyText(text);
+      });
+    } else {
+      this.fallbackCopyText(text);
+    }
+  },
+
+  fallbackCopyText(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      document.execCommand('copy');
+      this.showToast('已复制到剪贴板');
+    } catch (e) {
+      this.showToast('复制失败，请手动复制');
+    }
+    document.body.removeChild(ta);
+  },
+
+  speakText(text) {
+    if (!('speechSynthesis' in window)) {
+      this.showToast('当前浏览器不支持语音朗读');
+      return;
+    }
+    if (window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
+      this.showToast('已停止朗读');
+      return;
+    }
+    const cleanText = text.replace(/[*#`_~[\]]/g, '').trim();
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = 'zh-CN';
+    utterance.rate = 1.0;
+    utterance.onend = () => {};
+    utterance.onerror = () => {
+      this.showToast('朗读出错');
+    };
+    window.speechSynthesis.speak(utterance);
+    this.showToast('🔊 正在朗读...');
+  },
+
+  toggleChatVoice() {
+    const Recognition = this.getSpeechRecognition();
+    if (!Recognition) {
+      this.showToast('当前环境不支持语音识别');
+      return;
+    }
+    if (this.state.isChatListening) {
+      if (this.chatRecognitionInstance) {
+        this.chatRecognitionInstance.stop();
+      }
+      this.state.isChatListening = false;
+      this.render();
+      return;
+    }
+    try {
+      const rec = new Recognition();
+      this.chatRecognitionInstance = rec;
+      rec.lang = 'zh-CN';
+      rec.continuous = false;
+      rec.interimResults = false;
+      rec.onstart = () => {
+        this.state.isChatListening = true;
+        this.render();
+        this.showToast('正在倾听，请说话...');
+      };
+      rec.onresult = (event) => {
+        const transcript = Array.from(event.results).map(r => r[0]?.transcript).join('');
+        const input = document.getElementById('chat-input');
+        if (input && transcript) {
+          input.value = (input.value + ' ' + transcript).trim();
+        }
+      };
+      rec.onerror = (e) => {
+        console.warn('Voice error', e);
+        this.state.isChatListening = false;
+        this.render();
+        this.showToast('语音识别未获取到内容');
+      };
+      rec.onend = () => {
+        this.state.isChatListening = false;
+        this.render();
+      };
+      rec.start();
+    } catch (e) {
+      console.warn('Recognition start error', e);
+      this.state.isChatListening = false;
+      this.render();
+    }
+  },
+
   renderIngredientModal() {
+    if (this.state.duplicateDraft) {
+      const d = this.state.duplicateDraft;
+      return `
+        <div class="modal-overlay" onclick="App.dismissModal(event)">
+          <div class="modal-sheet">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">食材已存在</p>
+                <h2>「${this.escapeHtml(d.name)}」已在冰箱库存中</h2>
+              </div>
+              <button class="text-button" onclick="App.resolveDuplicate('cancel')">取消</button>
+            </div>
+            <div style="padding:12px 0 16px;font-size:14px;color:#555;line-height:1.6;">
+              <p>当前库存：<strong>${this.escapeHtml(d.existing.amount)} ${this.escapeHtml(d.existing.unit)}</strong></p>
+              <p>本次录入：<strong>${this.escapeHtml(d.amount)} ${this.escapeHtml(d.unit)}</strong></p>
+              <p style="margin-top:8px;color:#2c3e50;">请选择处理方式：</p>
+            </div>
+            <div class="modal-actions" style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;">
+              <button class="secondary-button" onclick="App.resolveDuplicate('cancel')">取消</button>
+              <button class="secondary-button" onclick="App.resolveDuplicate('overwrite')">覆盖原库存 (${this.escapeHtml(d.amount)}${this.escapeHtml(d.unit)})</button>
+              <button class="primary-button" onclick="App.resolveDuplicate('accumulate')">累加数量 (${this.escapeHtml(d.accumulated)}${this.escapeHtml(d.existing.unit)})</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
     if (!this.state.modal) return '';
     if (this.state.modal.mode === 'batch-preview') {
       return this.renderBatchPreviewModal();
@@ -2104,6 +2507,7 @@ const App = {
 
   closeModal() {
     this.state.modal = null;
+    this.state.duplicateDraft = null;
     this.render();
   },
 
@@ -2120,8 +2524,29 @@ const App = {
     const category = document.getElementById('modal-category')?.value || '其他';
 
     if (!name) {
+      this.showToast('请输入食材名称');
       const input = document.getElementById('modal-name');
-      if (input) input.focus();
+      if (input) {
+        input.classList.add('input-error');
+        input.focus();
+        setTimeout(() => input.classList.remove('input-error'), 1500);
+      }
+      return;
+    }
+
+    const parsedAmount = parseFloat(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      this.showToast('请输入大于 0 的有效数量');
+      const amountInput = document.getElementById('modal-amount');
+      if (amountInput) {
+        amountInput.classList.add('input-error');
+        amountInput.focus();
+        setTimeout(() => amountInput.classList.remove('input-error'), 1500);
+      }
+      return;
+    }
+    if (parsedAmount > 99999) {
+      this.showToast('数量过大，请确认分量');
       return;
     }
 
@@ -2129,7 +2554,7 @@ const App = {
     const nextItem = this.normalizeFridgeItem({
       id: existingIndex >= 0 ? this.state.fridge[existingIndex].id : `ingredient-${Date.now()}`,
       name,
-      amount,
+      amount: String(parsedAmount),
       unit,
       category
     }, existingIndex >= 0 ? existingIndex : this.state.fridge.length);
@@ -2146,21 +2571,50 @@ const App = {
     }
 
     this.state.modal = null;
+    this.showToast(`已更新：${name} ${parsedAmount}${unit}`);
     this.saveState();
     this.render();
   },
 
   deleteIngredientFromModal(name) {
-    this.state.fridge = this.state.fridge.filter(item => item.name !== name);
+    const item = this.state.fridge.find(entry => entry.name === name);
+    if (!item) {
+      this.state.modal = null;
+      this.render();
+      return;
+    }
+    const backup = { ...item };
+    this.state.fridge = this.state.fridge.filter(entry => entry.name !== name);
     this.state.modal = null;
     this.saveState();
     this.render();
+    this.showToast(`已从库存移除「${name}」`, {
+      text: '撤销',
+      onClick: () => {
+        this.state.fridge.unshift(backup);
+        this.saveState();
+        this.render();
+        this.showToast(`已恢复「${name}」`);
+      }
+    });
   },
 
   removeFromFridge(name) {
-    this.state.fridge = this.state.fridge.filter(item => item.name !== name);
+    const item = this.state.fridge.find(entry => entry.name === name);
+    if (!item) return;
+    const backup = { ...item };
+    this.state.fridge = this.state.fridge.filter(entry => entry.name !== name);
     this.saveState();
     this.render();
+    this.showToast(`已从库存移除「${name}」`, {
+      text: '撤销',
+      onClick: () => {
+        this.state.fridge.unshift(backup);
+        this.saveState();
+        this.render();
+        this.showToast(`已恢复「${name}」`);
+      }
+    });
   },
 
   showRecipe(id) {
@@ -2226,6 +2680,7 @@ const App = {
 
   async chat(userMsg) {
     this.state.chatMessages.push({ role: 'user', content: userMsg });
+    this.state.isChatLoading = true;
     this.render();
 
     const systemMsg = {
@@ -2246,10 +2701,11 @@ const App = {
         role: 'assistant',
         content: `暂时无法调用 AI（${AI_API.config.label} · ${AI_API.model}）：${error.message}\n可在上方"对话模型"下拉框切换，或去"偏好与 API"重新配置 Key。`
       });
+    } finally {
+      this.state.isChatLoading = false;
+      this.saveState();
+      this.render();
     }
-
-    this.saveState();
-    this.render();
   },
 
   async sendChat() {
@@ -2288,7 +2744,15 @@ const App = {
   async saveApiKey() {
     const input = document.getElementById('ai-key');
     const key = input?.value.trim();
-    if (!key) return;
+    if (!key) {
+      this.showApiSaveStatus('请输入有效的 API Key', 'error');
+      if (input) {
+        input.classList.add('input-error');
+        input.focus();
+        setTimeout(() => input.classList.remove('input-error'), 1500);
+      }
+      return;
+    }
 
     if (/[^\x00-\xFF]/.test(key)) {
       this.showApiSaveStatus('API Key 包含异常字符，请重新复制（只保留 sk- 开头的那串字符）', 'error');

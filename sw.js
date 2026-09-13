@@ -1,6 +1,6 @@
 // Service worker: offline-capable PWA with network-first updates.
 // Bump CACHE version whenever app files change.
-const CACHE = 'recipe-pwa-v17';
+const CACHE = 'recipe-pwa-v18';
 const ASSETS = [
   './',
   './index.html',

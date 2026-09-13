@@ -828,43 +828,37 @@ const RECIPES = [
   },
   {
     "id": 32,
-    "name": "蒜蓉西兰花",
+    "name": "清蒸南瓜",
     "category": "素菜",
     "difficulty": 1,
-    "time": "10分钟",
+    "time": "15分钟",
     "servings": 2,
     "tags": [
-      "西兰花",
-      "蒜"
+      "南瓜",
+      "枸杞"
     ],
     "ingredients": [
       {
-        "name": "西兰花",
-        "amount": "300g",
+        "name": "南瓜",
+        "amount": "500g",
         "type": "vegetable"
       },
       {
-        "name": "蒜",
-        "amount": "4瓣",
-        "type": "condiment"
+        "name": "枸杞",
+        "amount": "5g",
+        "type": "other"
       },
       {
-        "name": "盐",
-        "amount": "2g",
-        "type": "condiment"
-      },
-      {
-        "name": "食用油",
-        "amount": "15ml",
+        "name": "冰糖",
+        "amount": "10g",
         "type": "condiment"
       }
     ],
     "steps": [
-      "西兰花掰成小朵，淡盐水浸泡 10 分钟洗净，大蒜切碎成蓉",
-      "锅中烧开水加少许盐和油，放入西兰花焯水 1 分钟快速捞出沥水",
-      "热锅热油，放入一半蒜末小火煸炒出香味",
-      "倒入焯好的西兰花大火快速翻炒 1 分钟",
-      "撒入食盐和剩下的一半生蒜末，翻炒均匀立刻关火装盘"
+      "南瓜去皮去瓤，切成均匀的大块或薄片",
+      "南瓜块摆盘，撒上洗净的枸杞和少许冰糖",
+      "蒸锅水烧开后放入南瓜，大火蒸 12-15 分钟",
+      "用筷子能轻松扎透即可出锅，原味清甜可直接吃"
     ]
   },
   {
@@ -1073,36 +1067,36 @@ const RECIPES = [
   },
   {
     "id": 37,
-    "name": "清蒸鲈鱼",
+    "name": "香菇蒸鸡",
     "category": "荤菜",
     "difficulty": 2,
-    "time": "20分钟",
+    "time": "30分钟",
     "servings": 2,
     "tags": [
-      "鲈鱼",
-      "葱",
+      "鸡肉",
+      "香菇",
       "生姜",
-      "蒸鱼豉油"
+      "酱油"
     ],
     "ingredients": [
       {
-        "name": "鲈鱼",
-        "amount": "1条",
+        "name": "鸡肉",
+        "amount": "400g",
         "type": "meat"
       },
       {
-        "name": "葱",
-        "amount": "3根",
-        "type": "condiment"
+        "name": "香菇",
+        "amount": "8朵",
+        "type": "vegetable"
       },
       {
         "name": "生姜",
-        "amount": "4片",
-        "type": "condiment"
+        "amount": "3片",
+        "type": "vegetable"
       },
       {
-        "name": "蒸鱼豉油",
-        "amount": "25ml",
+        "name": "酱油",
+        "amount": "15ml",
         "type": "condiment"
       },
       {
@@ -1111,17 +1105,27 @@ const RECIPES = [
         "type": "condiment"
       },
       {
-        "name": "食用油",
-        "amount": "20ml",
+        "name": "淀粉",
+        "amount": "5g",
+        "type": "condiment"
+      },
+      {
+        "name": "盐",
+        "amount": "2g",
+        "type": "condiment"
+      },
+      {
+        "name": "葱",
+        "amount": "1根",
         "type": "condiment"
       }
     ],
     "steps": [
-      "鲈鱼处理干净两面各划三刀，抹少许料酒，鱼身下和鱼肚塞姜片葱段",
-      "蒸锅水烧大开，放入鱼盘大火猛蒸 8 分钟，关火虚蒸 2 分钟",
-      "倒掉盘中蒸出的腥水，拿掉蒸软的葱姜",
-      "鱼身铺上新鲜切细的葱白丝和姜丝，淋上蒸鱼豉油",
-      "烧热 20ml 热油至微冒青烟，均匀淋在葱丝上激发出香味即成"
+      "干香菇温水泡发后切十字花，泡香菇的水留用",
+      "鸡肉剁成块，加酱油、料酒、淀粉、姜片和少许盐抓匀，腌 15 分钟",
+      "腌好的鸡块铺入盘中，上面摆上香菇，淋两大勺泡香菇的水",
+      "蒸锅水烧开后放入，大火蒸 20 分钟至鸡肉熟透",
+      "出锅撒上葱花即可，鲜嫩不上火"
     ]
   },
   {

@@ -1271,6 +1271,41 @@ const RECIPES = [
   }
 ];
 
+// 菜谱成品图（有图的填路径，无图的留空走 emoji 兜底）
+// 图片来源：HowToCook（Anduin2017/HowToCook，MIT）与 CookLikeHOC（Gar-b-age/CookLikeHOC）
+const RECIPE_IMAGES = {
+  2: "images/recipes/2.jpeg",    // 红烧肉
+  3: "images/recipes/3.jpg",     // 宫保鸡丁
+  4: "images/recipes/4.jpeg",    // 糖醋排骨
+  5: "images/recipes/5.jpeg",    // 回锅肉
+  6: "images/recipes/6.jpg",     // 西红柿炒鸡蛋
+  7: "images/recipes/7.jpeg",    // 麻婆豆腐
+  8: "images/recipes/8.jpg",     // 虎皮青椒
+  9: "images/recipes/9.jpg",     // 地三鲜
+  10: "images/recipes/10.jpg",   // 炒青菜
+  11: "images/recipes/11.jpg",   // 清蒸鲈鱼
+  12: "images/recipes/12.jpg",   // 油焖大虾
+  13: "images/recipes/13.jpeg",  // 玉米排骨汤
+  15: "images/recipes/15.png",   // 扬州炒饭
+  16: "images/recipes/16.png",   // 茶叶蛋
+  18: "images/recipes/18.jpg",   // 酸辣土豆丝
+  19: "images/recipes/19.png",   // 鱼香肉丝
+  22: "images/recipes/22.jpg",   // 红烧茄子
+  24: "images/recipes/24.png",   // 蛋炒饭
+  28: "images/recipes/28.png",   // 酸菜鱼
+  29: "images/recipes/29.jpeg"   // 手撕包菜
+};
+
+// 无成品图时按菜谱分类展示的 emoji 与渐变头图色
+const RECIPE_CATEGORY_STYLE = {
+  "荤菜": { emoji: "🍖", gradient: "linear-gradient(135deg, #f6a96b 0%, #e8783a 100%)" },
+  "素菜": { emoji: "🥦", gradient: "linear-gradient(135deg, #8fc86b 0%, #5a9e3f 100%)" },
+  "水产": { emoji: "🐟", gradient: "linear-gradient(135deg, #6bb6d6 0%, #3a86b5 100%)" },
+  "汤":   { emoji: "🍲", gradient: "linear-gradient(135deg, #e8b56b 0%, #cf8a37 100%)" },
+  "主食": { emoji: "🍚", gradient: "linear-gradient(135deg, #d9c08a 0%, #b8945a 100%)" },
+  "早餐": { emoji: "🍳", gradient: "linear-gradient(135deg, #f2c14e 0%, #e09b2d 100%)" }
+};
+
 // 食材分类数据库 - 三级分类：大类 → 子类 → 食材
 const INGREDIENT_CATEGORIES = {
   "肉类": {

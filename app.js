@@ -1599,32 +1599,33 @@ const App = {
     `;
   },
 
+  // 菜谱封面：有真实成品图用图，无图用分类 emoji + 渐变兜底
+  recipeCover(recipe) {
+    const img = RECIPE_IMAGES[recipe.id];
+    if (img) {
+      return `<div class="rgc-cover has-img"><img src="${img}" alt="${this.escapeHtml(recipe.name)}成品图" loading="lazy"></div>`;
+    }
+    const style = RECIPE_CATEGORY_STYLE[recipe.category] || RECIPE_CATEGORY_STYLE["荤菜"];
+    return `<div class="rgc-cover emoji-cover" style="background:${style.gradient}"><span class="rgc-emoji">${style.emoji}</span></div>`;
+  },
+
   renderRecipeCard(recipe) {
+    const note = recipe.missingCore.length
+      ? `缺 ${recipe.missingCore.map(item => item.name).join('、')}`
+      : '主料完整';
     return `
-      <article class="recipe-card" onclick='App.showRecipe(${recipe.id})'>
-        <div class="recipe-head">
-          <div>
-            <span class="status-pill ${recipe.statusTone}">${this.escapeHtml(recipe.statusLabel)}</span>
-            <h3>${this.escapeHtml(recipe.name)}</h3>
-          </div>
-          <div class="score-pill">
-            <span>综合</span>
-            <strong>${recipe.score}</strong>
-          </div>
+      <article class="recipe-grid-card" onclick='App.showRecipe(${recipe.id})'>
+        <div class="rgc-cover-wrap">
+          ${this.recipeCover(recipe)}
+          <span class="status-pill ${recipe.statusTone} rgc-status">${this.escapeHtml(recipe.statusLabel)}</span>
         </div>
-
-        <div class="meta-row">
-          <span>${this.escapeHtml(recipe.category)}</span>
-          <span>${'★'.repeat(recipe.difficulty)}</span>
-          <span>${this.escapeHtml(recipe.time)}</span>
-          <span>健康 ${recipe.healthScore}</span>
-        </div>
-
-        <p class="reason-copy">${this.escapeHtml(recipe.reasons.join(' · ') || '按当前库存和偏好综合排序')}</p>
-
-        <div class="recipe-footer">
-          <span>主料命中 ${Math.round(recipe.coverage * 100)}%</span>
-          <span>${recipe.missingCore.length ? `缺 ${recipe.missingCore.map(item => item.name).join('、')}` : '主料完整'}</span>
+        <div class="rgc-body">
+          <h3>${this.escapeHtml(recipe.name)}</h3>
+          <div class="rgc-meta">
+            <span>${this.escapeHtml(recipe.time)}</span>
+            <span>健康 ${recipe.healthScore}</span>
+          </div>
+          <p class="rgc-note ${recipe.missingCore.length ? '' : 'ok'}">${this.escapeHtml(note)}</p>
         </div>
       </article>
     `;
@@ -1698,7 +1699,10 @@ const App = {
           <div class="featured-grid">
             ${menuPlan.items.length ? menuPlan.items.map(recipe => `
               <article class="feature-card" onclick='App.showRecipe(${recipe.id})'>
-                <span class="status-pill ${recipe.statusTone}">${this.escapeHtml(recipe.statusLabel)}</span>
+                <div class="fc-cover-wrap">
+                  ${this.recipeCover(recipe)}
+                  <span class="status-pill ${recipe.statusTone} rgc-status">${this.escapeHtml(recipe.statusLabel)}</span>
+                </div>
                 <h3>${this.escapeHtml(recipe.name)}</h3>
                 <p>${this.escapeHtml(recipe.reasons[0] || '按当前偏好和库存优先排序')}</p>
                 <div class="feature-metrics">
@@ -1721,19 +1725,79 @@ const App = {
           <div class="panel-head">
             <div>
               <p class="section-kicker">更多可选菜谱</p>
-              <h2>按可做性、健康度和你的偏好排序</h2>
+              <h2>按食材情况分组，组内按健康度排序</h2>
             </div>
           </div>
-          <div class="recipe-list">
-            ${recipes.length ? recipes.map(recipe => this.renderRecipeCard(recipe)).join('') : `
-              <div class="empty-state">
-                <p>先录入库存食材后，这里会出现更具体的菜谱排序。</p>
-              </div>
-            `}
-          </div>
+          ${recipes.length ? this.renderRecipeGroups(recipes) : `
+            <div class="empty-state">
+              <p>先录入库存食材后，这里会出现更具体的菜谱排序。</p>
+            </div>
+          `}
         </section>
       </section>
     `;
+  },
+
+  // 按食材状态分三组：库存充足 / 差一点就能做 / 还缺关键食材，每组内部两列网格
+  renderRecipeGroups(recipes) {
+    const groups = [
+      {
+        key: 'ready',
+        title: '库存充足，直接能做',
+        tone: 'ready',
+        list: recipes.filter(r => r.statusKey === 'ready'),
+        collapsed: false
+      },
+      {
+        key: 'nearly',
+        title: '补一点食材就能做',
+        tone: 'nearly',
+        list: recipes.filter(r => r.statusKey === 'nearly'),
+        collapsed: false
+      },
+      {
+        key: 'planned',
+        title: '还缺关键食材，先收藏灵感',
+        tone: 'planned',
+        list: recipes.filter(r => r.statusKey === 'planned' || r.statusKey === 'idea'),
+        collapsed: true
+      }
+    ];
+
+    return groups.map(group => {
+      if (!group.list.length) return '';
+      const cards = group.list.map(recipe => this.renderRecipeCard(recipe)).join('');
+      if (group.collapsed) {
+        return `
+          <div class="recipe-group" data-group="${group.key}">
+            <button class="recipe-group-head collapsed" onclick="App.toggleRecipeGroup(this)">
+              <span class="rgh-dot ${group.tone}"></span>
+              <span class="rgh-title">${group.title}</span>
+              <span class="rgh-count">${group.list.length} 道</span>
+              <span class="rgh-arrow">▾</span>
+            </button>
+            <div class="recipe-grid" style="display:none">${cards}</div>
+          </div>
+        `;
+      }
+      return `
+        <div class="recipe-group" data-group="${group.key}">
+          <div class="recipe-group-head">
+            <span class="rgh-dot ${group.tone}"></span>
+            <span class="rgh-title">${group.title}</span>
+            <span class="rgh-count">${group.list.length} 道</span>
+          </div>
+          <div class="recipe-grid">${cards}</div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  toggleRecipeGroup(btn) {
+    const grid = btn.nextElementSibling;
+    const collapsed = grid.style.display === 'none';
+    grid.style.display = collapsed ? 'grid' : 'none';
+    btn.classList.toggle('collapsed', !collapsed);
   },
 
   renderRecipeDetailPage() {
